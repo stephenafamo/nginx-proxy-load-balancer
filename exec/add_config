@@ -1,0 +1,3 @@
+#!/bin/bash
+
+printf "\n\"$1\"=\"$2\"=\"$3\"\n" >> /docker-config/nginx.config

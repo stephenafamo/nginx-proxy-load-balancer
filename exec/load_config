@@ -1,0 +1,68 @@
+#!/bin/bash
+
+cd /etc/nginx/conf.d
+find . ! -name 'default.conf' -type f -exec rm -f {} +
+cd
+
+while read line
+do
+    if echo $line | grep -F = &>/dev/null
+    then
+        container=$(echo "$line" | cut -d '=' -f 1)
+        special=" "
+        if [[ $container == \"* ]]; then special='"'; fi
+    	if [[ $container == \'* ]]; then special="'"; fi
+    	if [[ $container == \`* ]]; then special="\`"; fi
+        container="${container%$special}"
+		container="${container#$special}"
+
+        domain=$(echo "$line" | cut -d '=' -f 2)
+        special=" "
+        if [[ $domain == \"* ]]; then special='"'; fi
+    	if [[ $domain == \'* ]]; then special="'"; fi
+    	if [[ $domain == \`* ]]; then special="\`"; fi
+        domain="${domain%$special}"
+		domain="${domain#$special}"
+
+        path=$(echo "$line" | cut -d '=' -f 3)
+        special=" "
+        if [[ $path == \"* ]]; then special='"'; fi
+    	if [[ $path == \'* ]]; then special="'"; fi
+    	if [[ $path == \`* ]]; then special="\`"; fi
+        path="${path%$special}"
+		path="${path#$special}"
+
+		location="/"
+		filename="${domain% *}"
+		if [[ ! -z "$path" ]]; then
+			location="/$path/"
+			filename="${filename% *}-$path"
+		fi
+
+		check_address=$(ping -c 1 $container | grep "unknown host")
+
+		if [[ ! -z "$check_address" ]]; then
+			continue
+		fi
+
+		if [[ "$filename" == "default" ]]; then
+			filename="${filename% *}-custom"
+		fi
+
+		echo "
+			server {
+			    listen 80;
+			    server_name $domain;
+
+			    location $location {
+			        proxy_pass http://$container;
+			        proxy_set_header Host \$host;
+			        proxy_set_header X-Real-IP \$remote_addr;
+			        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+			        proxy_set_header X-Forwarded-Proto \$scheme;
+			    }
+			}" > /etc/nginx/conf.d/$filename.conf
+    fi
+done < /docker-config/nginx.config
+
+service nginx reload
