@@ -1,0 +1,1 @@
+Quick nginx container with auto proxy to docker containers
