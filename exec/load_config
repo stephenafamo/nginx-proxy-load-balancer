@@ -1,68 +1,72 @@
 #!/bin/bash
 
-cd /etc/nginx/conf.d
+cd ~/code/nginx/etc/nginx/conf.d
 find . ! -name 'default.conf' -type f -exec rm -f {} +
-cd
+cd ~/code/docker-nginx-auto-proxy/exec
 
-while read line
+numberoflines=$(wc -l  ~/code/nginx/docker/config | cut -d ' ' -f 1)
+
+while  ((i++)); read line
 do
-    if echo $line | grep -F = &>/dev/null
-    then
-        container=$(echo "$line" | cut -d '=' -f 1)
-        special=" "
-        if [[ $container == \"* ]]; then special='"'; fi
-    	if [[ $container == \'* ]]; then special="'"; fi
-    	if [[ $container == \`* ]]; then special="\`"; fi
-        container="${container%$special}"
-		container="${container#$special}"
+    value1=$(echo "$line" | cut -d '=' -f 1)
+    value1=$(strip_quotes $value1)
 
-        domain=$(echo "$line" | cut -d '=' -f 2)
-        special=" "
-        if [[ $domain == \"* ]]; then special='"'; fi
-    	if [[ $domain == \'* ]]; then special="'"; fi
-    	if [[ $domain == \`* ]]; then special="\`"; fi
-        domain="${domain%$special}"
-		domain="${domain#$special}"
+    value2=$(echo "$line" | cut -d '=' -f 2)
+    value2=$(strip_quotes "$value2")
 
-        path=$(echo "$line" | cut -d '=' -f 3)
-        special=" "
-        if [[ $path == \"* ]]; then special='"'; fi
-    	if [[ $path == \'* ]]; then special="'"; fi
-    	if [[ $path == \`* ]]; then special="\`"; fi
-        path="${path%$special}"
-		path="${path#$special}"
+    value3=$(echo "$line" | cut -d '=' -f 3)
+    value3=$(strip_quotes $value3)
 
-		location="/"
-		filename="${domain% *}"
-		if [[ ! -z "$path" ]]; then
-			location="/$path/"
-			filename="${filename% *}-$path"
+    value4=$(echo "$line" | cut -d '=' -f 4)
+    value4=$(strip_quotes $value4)
+
+    value5=$(echo "$line" | cut -d '=' -f 5)
+    value5=$(strip_quotes $value5)
+
+    value6=$(echo "$line" | cut -d '=' -f 6)
+    value6=$(strip_quotes $value6)
+
+	if [[ -z "$value1" ]] && [[ -z "$value2" ]] && [[ ! -z "$value3" ]]; then
+		declare "config_array_$value3=\"$value4\""
+	else
+		echo "configuring $config_array_UPSTREAM"
+		configure \
+		-u "$config_array_UPSTREAM" \
+		-D "$config_array_DOMAIN" \
+		-d "$config_array_DIRECTORY" \
+		-s "$config_array_SSL" \
+		-S "$config_array_SSL_SOURCE" \
+		-h "$config_array_HTTPS_ONLY" \
+		-n "$config_array_NAME"
+
+		while read line2; do unset "$line2"; done < <(compgen -A variable | grep "config_array")
+
+		if [[ ! -z "$value1" ]] && [[ -z "$value2" ]] && [[ -z "$value3" ]]; then #if the first section was followed by two equals signs
+			array_mode=1
+			config_array_NAME="$value1"
+		elif [[ ! -z "$value1" ]]; then #means the line did not start with an equals sign "=". It is a single line config
+			array_mode=0
+			config_array_NAME="$value1"
+			config_array_UPSTREAM="$value1"
+			config_array_DOMAIN="$value2"
+			config_array_DIRECTORY="$value3"			
+			config_array_SSL="$value4"			
+			config_array_SSL_SOURCE="$value5"			
+			config_array_HTTPS_ONLY="$value6"			
 		fi
+	fi
 
-		check_address=$(ping -c 1 $container | grep "unknown host")
+	if [[ "$i" == "$numberoflines" ]]; then
+		echo "here";
+		configure \
+		-u "$config_array_UPSTREAM" \
+		-D "$config_array_DOMAIN" \
+		-d "$config_array_DIRECTORY" \
+		-s "$config_array_SSL" \
+		-S "$config_array_SSL_SOURCE" \
+		-h "$config_array_HTTPS_ONLY" \
+		-n "$config_array_NAME"
+	fi
+done < ~/code/nginx/docker/config
 
-		if [[ ! -z "$check_address" ]]; then
-			continue
-		fi
-
-		if [[ "$filename" == "default" ]]; then
-			filename="${filename% *}-custom"
-		fi
-
-		echo "
-			server {
-			    listen 80;
-			    server_name $domain;
-
-			    location $location {
-			        proxy_pass http://$container;
-			        proxy_set_header Host \$host;
-			        proxy_set_header X-Real-IP \$remote_addr;
-			        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-			        proxy_set_header X-Forwarded-Proto \$scheme;
-			    }
-			}" > /etc/nginx/conf.d/$filename.conf
-    fi
-done < /docker-config/nginx.config
-
-service nginx reload
+# service nginx reload
