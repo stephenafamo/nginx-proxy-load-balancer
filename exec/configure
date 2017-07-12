@@ -46,16 +46,6 @@ if [[ -z "$auto_config_domain" ]]; then
 	echo "no domain specified";
 	exit 1
 fi
-		# while read line2
-		# do
-		# 	value=""
-		# 	eval 'value=(${'"$line2"'})'
-		# 	echo "variable: $line2"
-		# 	echo "value: $value"
-		# 	printf "\n"
-		# done < <(compgen -A variable | grep "auto_config")
-		# printf "\n\n"
-
 auto_config_first_domain="${auto_config_domain% *}"
 location="/"
 filename="${auto_config_name% *}"
@@ -118,7 +108,7 @@ if [[ "$auto_config_ssl" == "1" ]]; then
 		&& [[ -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/fullchain.pem)" ]] \
 		&& [[ -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/privkey.pem)" ]]; then
 		echo "Getting certificate for \"$auto_config_domain\""
-		echo "letsencrypt certonly -a webroot --webroot-path=/docker/challenge/$auto_config_first_domain -d ${auto_config_domain/ / -d }"
+		letsencrypt certonly -a webroot --webroot-path=/docker/challenge/$auto_config_first_domain -d ${auto_config_domain/ / -d }
 		echo "Cetificates obtained"	
 	fi
 	
