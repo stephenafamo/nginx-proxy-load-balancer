@@ -3,28 +3,6 @@ This docker image automatic proxies requests to your docker containers
 
 ## Usage
 
-
-1. Pull the docker image using `docker pull stephenafamo/docker-nginx-auto-proxy`.
-2. Write your domain configuration
-3. Mount the configuration to `/docker-config/nginx.config` e.g `docker run --name nginx-proxy -v /path/to/my/config.ext:/docker-config/nginx.config -d stephenafamo/docker-nginx-auto-proxy`
-3. All configuration should be in a single file of the following format
-
-    `config.conf`
-
-        upstream_address="domains.to.be.proxied"="optional/sub/directory"
-
-    for example
-
-        awesome_stephen="example.com www.example.com *.example.com"
-        awesome_blog="stephenafamo.com"="blog"
-
-    **NOTE**
-
-    * Neither the domain or upstream address should include the scheme `http://`
-    * If setting a proxy to another container, the `upstream_address` should be the container name
-    * The sub_directory should not start with the forward slash `/`
-    * If the target container cannot be reached, no configuration will be created. If the target container is in network, make sure that you add the nginx container to it too.
-
 ## Simple configuration
 
 You can use the environmental variables `CONTAINER`, `UPSTREAM`, `DIRECTORY`, `SSL`, `SSL_SOURCE` and `HTTPS_ONLY` to set a single line of the config while bringing up the container
