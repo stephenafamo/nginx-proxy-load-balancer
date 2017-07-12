@@ -28,4 +28,6 @@ RUN apt-get update \
 COPY init.sh /init.sh
 RUN chmod 755 /init.sh
 
+EXPOSE 443
+
 CMD ["/init.sh"]

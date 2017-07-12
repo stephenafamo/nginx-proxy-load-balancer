@@ -74,6 +74,7 @@ fi
 echo "
 	server {
 	    listen 80;
+	    listen [::]:80;
 	    server_name $auto_config_domain;
 
 	    location $location {
@@ -118,8 +119,9 @@ if [[ "$auto_config_ssl" == "1" ]]; then
 	else
 		echo "
 			server {
-				listen 443 ssl;
-			    server_name $auto_config_domain;
+				listen 443 ssl http2;
+				listen [::]:443 ssl http2;
+				server_name $auto_config_domain;
 
 				ssl_certificate /etc/letsencrypt/live/$auto_config_first_domain/fullchain.pem;
 				ssl_certificate_key /etc/letsencrypt/live/$auto_config_first_domain/privkey.pem;
