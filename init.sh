@@ -1,13 +1,16 @@
 #!/bin/bash
 
-if [[ ! -z "$CONTAINER" ]] && [[ ! -z "$DOMAIN" ]] ; then
-	container=$CONTAINER
+if [[ ! -z "$UPSTREAM" ]] && [[ ! -z "$DOMAIN" ]] ; then
+	container=$UPSTREAM
 	domain=$DOMAIN
-	directory=""
+	directory=$DIRECTORY
+	ssl=$SSL
+	ssl_source=$SSL_SOURCE
+	https_only=$HTTPS_ONLY
 	if [[ ! -z "$DIR" ]]; then
 		directory="$DIR"
 	fi
-	add_config $container $domain $directory
+	add_config $container $domain $directory $ssl $ssl_source $https_only
 fi
 
 load_config
