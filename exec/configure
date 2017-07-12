@@ -94,17 +94,17 @@ echo "
 	        proxy_set_header X-Forwarded-Proto \$scheme;
 	    }
 	}
-	" > ~/code/nginx/etc/nginx/conf.d/$filename.conf 
+	" > /etc/nginx/conf.d/$filename.conf 
 
 if [[ "$auto_config_ssl" == "1" ]]; then
-	if [[ -z "$(cat  ~/code/nginx/etc/ssl/certs/dhparam.pem)" ]]; then
+	if [[ -z "$(cat  /etc/ssl/certs/dhparam.pem)" ]]; then
 		echo "This will happen only once"
-		openssl dhparam -out  ~/code/nginx/etc/ssl/certs/dhparam.pem 2048
+		openssl dhparam -out  /etc/ssl/certs/dhparam.pem 2048
 		echo "DH parameters, generated"	
 	fi
 
-	location_start=$(grep -nm 1 "location $location {" ~/code/nginx/etc/nginx/conf.d/$filename.conf | cut -d : -f 1)
-	location_end=$(grep -nm 1 "}" ~/code/nginx/etc/nginx/conf.d/$filename.conf | cut -d : -f 1)
+	location_start=$(grep -nm 1 "location $location {" /etc/nginx/conf.d/$filename.conf | cut -d : -f 1)
+	location_end=$(grep -nm 1 "}" /etc/nginx/conf.d/$filename.conf | cut -d : -f 1)
 
 	sed -i -e "${location_end}a\ \n\
 		location "/.well-known/acme-challenge" { \n\
@@ -112,58 +112,63 @@ if [[ "$auto_config_ssl" == "1" ]]; then
 			root /docker/challenge/$auto_config_first_domain; \n\
 			allow all; \n\
 		} \
-			" ~/code/nginx/etc/nginx/conf.d/$filename.conf
+			" /etc/nginx/conf.d/$filename.conf
 	
 	if [[ "$auto_config_ssl_source" == "letsencrypt" ]] \
-		&& [[ -z "$(cat  ~/code/nginx/etc/letsencrypt/live/$auto_config_first_domain/fullchain.pem)" ]] \
-		&& [[ -z "$(cat  ~/code/nginx/etc/letsencrypt/live/$auto_config_first_domain/privkey.pem)" ]]; then
+		&& [[ -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/fullchain.pem)" ]] \
+		&& [[ -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/privkey.pem)" ]]; then
 		echo "Getting certificate for \"$auto_config_domain\""
 		echo "letsencrypt certonly -a webroot --webroot-path=/docker/challenge/$auto_config_first_domain -d ${auto_config_domain/ / -d }"
 		echo "Cetificates obtained"	
 	fi
+	
+	if [[ -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/fullchain.pem)" ]] \
+		&& [[ -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/privkey.pem)" ]]; then
+		echo "error while getting certificate, skipping ssl configuration"	
+	else
+		echo "
+			server {
+				listen 443 ssl;
+			    server_name $auto_config_domain;
 
-	echo "
-		server {
-			listen 443 ssl;
-		    server_name $auto_config_domain;
+				ssl_certificate /etc/letsencrypt/live/$auto_config_first_domain/fullchain.pem;
+				ssl_certificate_key /etc/letsencrypt/live/$auto_config_first_domain/privkey.pem;
+				ssl_session_cache shared:SSL:10m;
+				ssl_session_timeout 5m;
+				ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+				ssl_prefer_server_ciphers on;
+				ssl_dhparam /etc/ssl/certs/dhparam.pem;
+				ssl_ciphers 'ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:DES-CBC3-SHA:!DSS';
+				ssl_stapling on;
+				ssl_stapling_verify on;
+				add_header Strict-Transport-Security max-age=15768000;
 
-			ssl_certificate /etc/letsencrypt/live/$auto_config_first_domain/fullchain.pem;
-			ssl_certificate_key /etc/letsencrypt/live/$auto_config_first_domain/privkey.pem;
-			ssl_session_cache shared:SSL:10m;
-			ssl_session_timeout 5m;
-			ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
-			ssl_prefer_server_ciphers on;
-			ssl_dhparam /etc/ssl/certs/dhparam.pem;
-			ssl_ciphers 'ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:DES-CBC3-SHA:!DSS';
-			ssl_stapling on;
-			ssl_stapling_verify on;
-			add_header Strict-Transport-Security max-age=15768000;
+				location "/.well-known/acme-challenge" {
+					default_type "text/plain";
+					root /docker/challenge/$auto_config_first_domain;
+					allow all;
+				}
 
-			location "/.well-known/acme-challenge" {
-				default_type "text/plain";
-				root /docker/challenge/$auto_config_first_domain;
-				allow all;
+			    location $location {
+			        proxy_pass http://$auto_config_upstream;
+			        proxy_set_header Host \$host;
+			        proxy_set_header X-Real-IP \$remote_addr;
+			        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+			        proxy_set_header X-Forwarded-Proto \$scheme;
+			    }
 			}
+			" > /etc/nginx/conf.d/$filename-ssl.conf
 
-		    location $location {
-		        proxy_pass http://$auto_config_upstream;
-		        proxy_set_header Host \$host;
-		        proxy_set_header X-Real-IP \$remote_addr;
-		        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-		        proxy_set_header X-Forwarded-Proto \$scheme;
-		    }
-		}
-		" > ~/code/nginx/etc/nginx/conf.d/$filename-ssl.conf
+		if [[ "$auto_config_https_only" == "1" ]]; then
 
-	if [[ "$auto_config_https_only" == "1" ]]; then
+			sed -i -e "${location_start},${location_end}d" /etc/nginx/conf.d/$filename.conf
 
-		sed -i -e "${location_start},${location_end}d" ~/code/nginx/etc/nginx/conf.d/$filename.conf
-
-		location_start_acme=$(grep -nm 1 ".well-known/acme-challenge" ~/code/nginx/etc/nginx/conf.d/$filename.conf | cut -d : -f 1)
-			location_end_acme_relative=$( tail --lines="+$location_start_acme" ~/code/nginx/etc/nginx/conf.d/$filename.conf | grep -nm 1 "}" | cut -d : -f 1)
-			location_end_acme=$(($location_start_acme + $location_end_acme_relative))
-		sed -i -e "${location_end_acme}i\ \n\
-		return 301 https://\$host\$request_uri;" ~/code/nginx/etc/nginx/conf.d/$filename.conf
+			location_start_acme=$(grep -nm 1 ".well-known/acme-challenge" /etc/nginx/conf.d/$filename.conf | cut -d : -f 1)
+				location_end_acme_relative=$( tail --lines="+$location_start_acme" /etc/nginx/conf.d/$filename.conf | grep -nm 1 "}" | cut -d : -f 1)
+				location_end_acme=$(($location_start_acme + $location_end_acme_relative))
+			sed -i -e "${location_end_acme}i\ \n\
+			return 301 https://\$host\$request_uri;" /etc/nginx/conf.d/$filename.conf
+		fi
 	fi
 fi
 }

@@ -6,7 +6,7 @@ LABEL maintainer="Stephen Afam-Osemene <stephenafamo@gmail.com>"
 # Copy custom commands and give appropriate premissions
 # ------------------------------------------
 COPY exec /docker/exec/
-RUN chmod 755 -R /docker-exec
+RUN chmod 755 -R /docker/exec
 
 # ------------------------------------------
 # Set add the location of executables to the path variable so they can be globally accessed
