@@ -56,7 +56,8 @@ The following commands are available through the contianer.
 ## Let's Encrypt
 
 If set up correctly, the container will attempt to get a new certificate if there was none, or renew the certificate.
-The normal `letsencrypt renew` command may fail. Instead, to renew certificates, run the `load_config` command and certificate renewal will be attempted during the process. You should set up a cron to do this automatically
+The normal `letsencrypt renew` command may fail. Instead, to renew certificates, run the `load_config` command and certificate renewal will be attempted during the process. 
+You should set up a cron to do this automatically e.g `30 2 * * 1 docker exec nginx load_config >> /var/log/nginx-reload.log`
 
 ## Roadmap
 
