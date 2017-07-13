@@ -39,7 +39,7 @@ The syntax is as follows.
         myblog==
         ==UPSTREAM="stephenafamo.com"
         ==DOMAIN=business.hotels.ng.dev
-        ==DIR=blog
+        ==DIRECTORY=blog
         ==SSL=1
         ==SSL_SOURCE="letsencrypt"
         ==SSL_MODE="any"
@@ -50,8 +50,13 @@ The syntax is as follows.
 The following commands are available through the contianer.
 
 1. **_active_domains_**: Will list out the domains that have been configured
-2. **_add_config upstream domain directory ssl ssl_source https_only_**: Will add a domain to the config file
-3. **__load_config__**: Will re-generate configuration files and reload nginx
+2. **_add_config_** _upstream domain directory ssl ssl_source https_only_: Will add a domain to the config file
+3. **_load_config_**: Will re-generate configuration files and reload nginx
+
+## Let's Encrypt
+
+If set up correctly, the container will attempt to get a new certificate if there was none, or renew the certificate.
+The normal `letsencrypt renew` command may fail. Instead, to renew certificates, run the `load_config` command and certificate renewal will be attempted during the process. You should set up a cron to do this automatically
 
 ## Roadmap
 

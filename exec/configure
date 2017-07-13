@@ -96,26 +96,39 @@ if [[ "$auto_config_ssl" == "1" ]]; then
 
 	location_start=$(grep -nm 1 "location $location {" /etc/nginx/conf.d/$filename.conf | cut -d : -f 1)
 	location_end=$(grep -nm 1 "}" /etc/nginx/conf.d/$filename.conf | cut -d : -f 1)
+    letsencrypt_webroot=""
+	letsencrypt_webroot="/docker/challenge/$auto_config_first_domain"
+	mkdir -p $letsencrypt_webroot
 
 	sed -i -e "${location_end}a\ \n\
 		location "/.well-known/acme-challenge" { \n\
 			default_type "text/plain"; \n\
-			root /docker/challenge/$auto_config_first_domain; \n\
+			root $letsencrypt_webroot; \n\
 			allow all; \n\
 		} \
 			" /etc/nginx/conf.d/$filename.conf
-	
+
+	service nginx reload
+
 	if [[ "$auto_config_ssl_source" == "letsencrypt" ]] \
 		&& [[ -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/fullchain.pem)" ]] \
 		&& [[ -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/privkey.pem)" ]]; then
 		echo "Getting certificate for \"$auto_config_domain\""
-		letsencrypt certonly -a webroot --webroot-path=/docker/challenge/$auto_config_first_domain -d ${auto_config_domain/ / -d }
-		echo "Cetificates obtained"	
+		letsencrypt certonly -n -a webroot --webroot-path=$letsencrypt_webroot -d ${auto_config_domain/ / -d }
+	elif [[ "$auto_config_ssl_source" == "letsencrypt" ]] \
+		&& [[ ! -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/fullchain.pem)" ]] \
+		&& [[ ! -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/privkey.pem)" ]]; then
+		echo "Attempting to renew certificate for \"$auto_config_domain\""
+		letsencrypt_renewal_config=""
+		letsencrypt_renewal_config="/etc/letsencrypt/renewal/$auto_config_first_domain.conf"
+		sed -i.bak "/^webroot_path =.*/c\webroot_path = $letsencrypt_webroot," $letsencrypt_renewal_config
+		letsencrypt certonly -n -a webroot --webroot-path=$letsencrypt_webroot -d ${auto_config_domain/ / -d }
+		mv $letsencrypt_renewal_config.bak $letsencrypt_renewal_config
 	fi
 	
 	if [[ -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/fullchain.pem)" ]] \
 		&& [[ -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/privkey.pem)" ]]; then
-		echo "error while getting certificate, skipping ssl configuration"	
+		echo "ssl certificate error, skipping ssl configuration"	
 	else
 		echo "
 			server {
