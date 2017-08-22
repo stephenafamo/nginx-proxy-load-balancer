@@ -122,7 +122,7 @@ if [[ "$auto_config_ssl" == "1" ]]; then
 		letsencrypt_renewal_config=""
 		letsencrypt_renewal_config="/etc/letsencrypt/renewal/$auto_config_first_domain.conf"
 		sed -i.bak "/^webroot_path =.*/c\webroot_path = $letsencrypt_webroot," $letsencrypt_renewal_config
-		letsencrypt certonly -n -a webroot --webroot-path=$letsencrypt_webroot -d ${auto_config_domain/ / -d }
+		letsencrypt certonly --renew-with-new-domains -n -a webroot --webroot-path=$letsencrypt_webroot -d ${auto_config_domain/ / -d }
 		mv $letsencrypt_renewal_config.bak $letsencrypt_renewal_config
 	fi
 	
