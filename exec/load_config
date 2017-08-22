@@ -39,6 +39,8 @@ do
 		-h "$config_array_HTTPS_ONLY" \
 		-n "$config_array_NAME"
 
+		echo "configured $config_array_UPSTREAM"
+
 		while read line2; do unset "$line2"; done < <(compgen -A variable | grep "config_array")
 
 		if [[ ! -z "$value1" ]] && [[ -z "$value2" ]] && [[ -z "$value3" ]]; then #if the first section was followed by two equals signs
