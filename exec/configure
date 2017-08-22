@@ -48,7 +48,7 @@ if [[ -z "$auto_config_domain" ]]; then
 fi
 auto_config_first_domain="${auto_config_domain% *}"
 location="/"
-filename="${auto_config_name% *}"
+filename="${auto_config_first_domain% *}"
 if [[ ! -z "$auto_config_directory" ]]; then
 	location="/$auto_config_directory/"
 	filename="${filename% *}-$auto_config_directory"
@@ -101,7 +101,7 @@ if [[ "$auto_config_ssl" == "1" ]]; then
 	mkdir -p $letsencrypt_webroot
 
 	sed -i -e "${location_end}a\ \n\
-		location "/.well-known/acme-challenge" { \n\
+		location ^~ /.well-known/acme-challenge { \n\
 			default_type "text/plain"; \n\
 			root $letsencrypt_webroot; \n\
 			allow all; \n\
@@ -119,11 +119,7 @@ if [[ "$auto_config_ssl" == "1" ]]; then
 		&& [[ ! -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/fullchain.pem)" ]] \
 		&& [[ ! -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/privkey.pem)" ]]; then
 		echo "Attempting to renew certificate for \"$auto_config_domain\""
-		letsencrypt_renewal_config=""
-		letsencrypt_renewal_config="/etc/letsencrypt/renewal/$auto_config_first_domain.conf"
-		sed -i.bak "/^webroot_path =.*/c\webroot_path = $letsencrypt_webroot," $letsencrypt_renewal_config
-		letsencrypt certonly --renew-with-new-domains -n -a webroot --webroot-path=$letsencrypt_webroot -d ${auto_config_domain/ / -d }
-		mv $letsencrypt_renewal_config.bak $letsencrypt_renewal_config
+		letsencrypt certonly --cert-name "$auto_config_first_domain" -n -a webroot --webroot-path=$letsencrypt_webroot -d ${auto_config_domain/ / -d }
 	fi
 	
 	if [[ -z "$(cat  /etc/letsencrypt/live/$auto_config_first_domain/fullchain.pem)" ]] \
@@ -148,7 +144,7 @@ if [[ "$auto_config_ssl" == "1" ]]; then
 				ssl_stapling_verify on;
 				add_header Strict-Transport-Security max-age=15768000;
 
-				location "/.well-known/acme-challenge" {
+				location ^~ /.well-known/acme-challenge {
 					default_type "text/plain";
 					root /docker/challenge/$auto_config_first_domain;
 					allow all;
