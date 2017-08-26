@@ -2,22 +2,24 @@
 
 while read line2; do unset "$line2"; done < <(compgen -A variable | grep "auto_config")
 
-while getopts ":u:d:s:S:h:n:D:" opt; do
+while getopts ":u:d:s:S:h:n:D:O:" opt; do
   case $opt in
     u)
-      auto_config_upstream=$(strip_quotes "$OPTARG");;
+      auto_config_upstream="$OPTARG";;
+    O)
+      auto_config_upstream_options="$OPTARG";;
     D)
-      auto_config_domain=$(strip_quotes "$OPTARG");;
+      auto_config_domain="$OPTARG";;
     d)
-      auto_config_directory=$(strip_quotes "$OPTARG");;
+      auto_config_directory="$OPTARG";;
     s)
-      auto_config_ssl=$(strip_quotes "$OPTARG");;
+      auto_config_ssl="$OPTARG";;
     S)
-      auto_config_ssl_source=$(strip_quotes "$OPTARG");;
+      auto_config_ssl_source="$OPTARG";;
     h)
-      auto_config_https_only=$(strip_quotes "$OPTARG");;
+      auto_config_https_only="$OPTARG";;
     n)
-      auto_config_name=$(strip_quotes "$OPTARG");;
+      auto_config_name="$OPTARG";;
     \?)
       echo "Invalid option: -$OPTARG" >&2
       exit 1
@@ -35,17 +37,21 @@ function configure_the_config(){
 [[ ! -z "$auto_config_ssl" ]] || auto_config_ssl="$DEFAULT_SSL" 
 [[ ! -z "$auto_config_ssl_source" ]] || auto_config_ssl_source="$DEFAULT_SSL_SOURCE"
 [[ ! -z "$auto_config_https_only" ]] || auto_config_https_only="$DEFAULT_HTTPS_ONLY"
-[[ ! -z "$auto_config_name" ]] || auto_config_name="$auto_config_domain"
 
 if [[ -z "$auto_config_upstream" ]]; then
 	echo "no upstream specified";
 	exit 1
+else
+	auto_config_upstream=$(sed -e "s/[[:space:]]\+/ /g" <<< $auto_config_upstream)
 fi
 
 if [[ -z "$auto_config_domain" ]]; then
 	echo "no domain specified";
 	exit 1
+else
+	auto_config_domain=$(sed -e "s/[[:space:]]\+/ /g" <<< $auto_config_domain)
 fi
+
 auto_config_first_domain="${auto_config_domain% *}"
 location="/"
 filename="${auto_config_first_domain% *}"
@@ -58,18 +64,46 @@ tmpfile=$(mktemp /tmp/abc-script.XXXXXX)
 exec 3>"$tmpfile"
 rm "$tmpfile"
 
-ping -c 1 $auto_config_upstream > $tmpfile 2>&1
-check_address=$(grep -m 1 "unknown host" $tmpfile)	
+oldIFS="$IFS" # store current value of IFS
 
-if [[ ! -z "$check_address" ]]; then
-	echo "upstream \"$auto_config_upstream\" cannot be reached";
-	exit 1
-fi
+IFS='|' read -r -a auto_config_upstream_array <<< "$auto_config_upstream" # turn to array and loop through
+for single_upstream in "${auto_config_upstream_array[@]}"
+do
+	ping -c 1 "${single_upstream% *}" > $tmpfile 2>&1 # ping the host to check if it is valid
+	check_address=$(grep -m 1 "unknown host" $tmpfile)	
+
+	if [[ ! -z "$check_address" ]]; then
+		echo "upstream \"${single_upstream% *}\" cannot be reached";
+		exit 1
+	fi
+done
+
+IFS="$oldIFS" # restore IFS
 
 if [[ "$filename" == "default" ]]; then
 	filename="${filename% *}-custom"
 fi
 
+# Add the upstream block
+if [[ ! -z "$auto_config_upstream_options" ]]; then
+	echo "
+		upstream ${auto_config_name}_upstream  {
+		    server ${auto_config_upstream//\|/;
+			server };
+			${auto_config_upstream_options//\|/;
+			};
+		}
+		" > /etc/nginx/conf.d/"$filename"-"$auto_config_directory"-upstream.conf
+else
+	echo "
+		upstream ${auto_config_name}_upstream  {
+		    server ${auto_config_upstream//\|/;
+			server };
+		}
+		" > /etc/nginx/conf.d/"$filename"-"$auto_config_directory"-upstream.conf
+fi
+
+# add the server block
 if [[ ! -e /etc/nginx/conf.d/"$filename".conf ]]; then
 	echo "
 		server {
@@ -87,11 +121,12 @@ if [[ ! -e /etc/nginx/conf.d/"$filename".conf ]]; then
 		" > /etc/nginx/conf.d/"$filename".conf
 fi
 
+# add location and proxy details to server block
 closingBracketLine=`expr $(wc -l /etc/nginx/conf.d/"$filename".conf | cut -d ' ' -f 1) - $(tac /etc/nginx/conf.d/"$filename".conf | grep -nm 1 } | cut -d : -f 1) + 1`
 
 sed -i -e "${closingBracketLine}i\ \n\
 			location $location { \n\
-		        proxy_pass http://$auto_config_upstream; \n\
+		        proxy_pass http://${auto_config_name}_upstream; \n\
 		        proxy_set_header Host \$host; \n\
 		        proxy_set_header X-Real-IP \$remote_addr; \n\
 		        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; \n\
@@ -121,7 +156,7 @@ if [[ "$auto_config_ssl" == "1" ]]; then
 		&& [[ -e /etc/letsencrypt/live/"$auto_config_first_domain"/fullchain.pem ]] \
 		&& [[ -e /etc/letsencrypt/live/"$auto_config_first_domain"/privkey.pem ]]; then
 		echo "Attempting to renew certificate for \"$auto_config_domain\""
-		letsencrypt certonly --cert-name "$auto_config_first_domain" -n -a webroot --webroot-path=$letsencrypt_webroot -d ${auto_config_domain/ / -d }
+		letsencrypt certonly --cert-name "$auto_config_first_domain" -n -a webroot --webroot-path=$letsencrypt_webroot -d ${auto_config_domain// / -d }
 	fi
 	
 	if [[ ! -e /etc/letsencrypt/live/"$auto_config_first_domain"/fullchain.pem ]] \
@@ -161,7 +196,7 @@ if [[ "$auto_config_ssl" == "1" ]]; then
 
 		sed -i -e "${closingBracketLineSSL}i\ \n\
 					location $location { \n\
-				        proxy_pass http://$auto_config_upstream; \n\
+				        proxy_pass http://${auto_config_name}_upstream; \n\
 				        proxy_set_header Host \$host; \n\
 				        proxy_set_header X-Real-IP \$remote_addr; \n\
 				        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; \n\

@@ -4,70 +4,45 @@ cd /etc/nginx/conf.d
 find . ! -name 'default.conf' -type f -exec rm -f {} +
 cd /docker/exec
 
-numberoflines=$(wc -l  /docker/config/config | cut -d ' ' -f 1)
-
-while  ((i++)); read line
+while read line || [ -n "$line" ]
 do
-    value1=$(echo "$line" | cut -d '=' -f 1)
-    value1=$(strip_quotes $value1)
+    value1=$(echo "$line" | cut -d '"' -f 1)
 
-    value2=$(echo "$line" | cut -d '=' -f 2)
-    value2=$(strip_quotes "$value2")
+    value2=$(echo "$line" | cut -d '"' -f 2)
 
-    value3=$(echo "$line" | cut -d '=' -f 3)
-    value3=$(strip_quotes $value3)
+    value3=$(echo "$line" | cut -d '"' -f 3)
 
-    value4=$(echo "$line" | cut -d '=' -f 4)
-    value4=$(strip_quotes $value4)
-
-    value5=$(echo "$line" | cut -d '=' -f 5)
-    value5=$(strip_quotes $value5)
-
-    value6=$(echo "$line" | cut -d '=' -f 6)
-    value6=$(strip_quotes $value6)
-
-	if [[ -z "$value1" ]] && [[ -z "$value2" ]] && [[ ! -z "$value3" ]]; then
-		declare "config_array_$value3=\"$value4\""
-	else
-		echo "configuring $config_array_UPSTREAM"
-		configure \
-		-u "$config_array_UPSTREAM" \
-		-D "$config_array_DOMAIN" \
-		-d "$config_array_DIRECTORY" \
-		-s "$config_array_SSL" \
-		-S "$config_array_SSL_SOURCE" \
-		-h "$config_array_HTTPS_ONLY" \
-		-n "$config_array_NAME"
-
-		echo "configured $config_array_UPSTREAM"
-
-		while read line2; do unset "$line2"; done < <(compgen -A variable | grep "config_array")
-
-		if [[ ! -z "$value1" ]] && [[ -z "$value2" ]] && [[ -z "$value3" ]]; then #if the first section was followed by two equals signs
-			array_mode=1
-			config_array_NAME="$value1"
-		elif [[ ! -z "$value1" ]]; then #means the line did not start with an equals sign "=". It is a single line config
-			array_mode=0
-			config_array_NAME="$value1"
-			config_array_UPSTREAM="$value1"
-			config_array_DOMAIN="$value2"
-			config_array_DIRECTORY="$value3"			
-			config_array_SSL="$value4"			
-			config_array_SSL_SOURCE="$value5"			
-			config_array_HTTPS_ONLY="$value6"			
-		fi
+	if [[ -z "$value2" ]] && [[ -z "$value3" ]]; then
+		continue
 	fi
 
-	if [[ "$i" == "$numberoflines" ]]; then
-		configure \
-		-u "$config_array_UPSTREAM" \
-		-D "$config_array_DOMAIN" \
-		-d "$config_array_DIRECTORY" \
-		-s "$config_array_SSL" \
-		-S "$config_array_SSL_SOURCE" \
-		-h "$config_array_HTTPS_ONLY" \
-		-n "$config_array_NAME"
+	if [[ ! -z "$value2" ]] && [[ -z "$value3" ]]; then
+		if [[ "$value2" == "$config_array_NAME" ]]; then
+			echo "configuring $config_array_NAME"
+			configure \
+			-u "$config_array_UPSTREAM" \
+			-O "$config_array_UPSTREAM_OPTIONS" \
+			-D "$config_array_DOMAIN" \
+			-d "$config_array_DIRECTORY" \
+			-s "$config_array_SSL" \
+			-S "$config_array_SSL_SOURCE" \
+			-h "$config_array_HTTPS_ONLY" \
+			-n "$config_array_NAME"
+
+			echo "configured $config_array_NAME"
+
+			while read line2; do unset "$line2"; done < <(compgen -A variable | grep "config_array")
+		else
+			config_array_NAME="$value2"
+			continue
+		fi	
 	fi
+
+	if [[ -z "$value1" ]] && [[ ! -z "$value2" ]] && [[ ! -z "$value3" ]]; then
+		declare "config_array_$value2=$value3"
+		continue
+	fi
+
 done < /docker/config/config
 
 service nginx reload
