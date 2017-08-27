@@ -29,11 +29,11 @@ The syntax is as follows.
 4. For load balancing, you can add multiple `UPSTREAM` addresses. Separate them with pipes.
 5. You can add any extra parameters at the end of a single upstream server. [Read this](http://nginx.org/en/docs/http/ngx_http_upstream_module.html#server).
 6. The `UPSTREAM_OPTIONS` are not required. Use only if you need to add extra directives to the upstream block for fine tuning. Separate directives with pipes. [Read this](http://nginx.org/en/docs/http/ngx_http_upstream_module.html).
-7. `domains_to_proxy` can be multiple, but should be seperated by spaces
-8. `directory` is the optional path to to be proxies. For example, if you'd like to proxy only `example.com/blog`, the `blog` will be the directory
-9. `ssl` can be enable by setting the parameter to `1`
-10. `ssl_source` for now, only letsencrypt is supported. Certificates will be generated automatically. Soon, mannual configuration will be supported. To be able to re-use the generated certificates, you should mount your `/etc/letsencrypt` folder into the container `-v /etc/letsencrypt:/etc/letsencrypt`. THis only works if `ssl` is `1`.
-11. `https_only` If this is set to `1`, then all `http` requests will be redirected to `https`
+7. `DOMAIN` can be multiple, but should be seperated by spaces
+8. `DIRECTORY` is the optional path to to be proxies. For example, if you'd like to proxy only `example.com/blog`, the `blog` will be the directory
+9. `SSL` can be enable by setting the parameter to `1`
+10. `SSL_SOURCE` for now, only letsencrypt is supported. Certificates will be generated automatically. Soon, mannual configuration will be supported. To be able to re-use the generated certificates, you should mount your `/etc/letsencrypt` folder into the container `-v /etc/letsencrypt:/etc/letsencrypt`. THis only works if `SSL` is `1`.
+11. `HTTPS_ONLY` If this is set to `1`, then all `http` requests will be redirected to `https`
 
 ## Additional commands 
 
