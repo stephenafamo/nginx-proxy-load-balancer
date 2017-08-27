@@ -5,12 +5,18 @@ This docker image automatic proxies requests to your docker containers
 
 ## Configuration
 
+First, pull the image from docker hub
+
+    docker pull stephenafamo/docker-nginx-auto-proxy:2.1.0
+
+Run a container
+
+    docker run --name nginx -v /path/to/my/config:/docker/config/config -p 80:80 -p 443:443 stephenafamo/docker-nginx-auto-proxy:2.1.0
+
 The container reads a configuration file `/docker/config/config`
 To easily manage all proxies, you should mount your own configuration file.
 `-v /path/to/my/config.txt:/docker/config/config`
-The syntax is as follows.
-
-    Syntax
+The syntax is as follows(showing all possible fields).
 
         "myblog"
         "UPSTREAM"main.stephenafamo.com|1st.stephenafamo.com weight=3|2nd.stpehenafamo.com max_fails=3 fail_timeout=30s"
@@ -23,6 +29,7 @@ The syntax is as follows.
         "myblog"
 
 
+1. The only required fields are `UPSTREAM` and `DOMAIN`
 1. A block of configuration should be started and ended by the configuration name. This name should be unique. In the example above, the configuration name is `myblog`
 2. Neither the domain or upstream address should include the scheme `http://`
 3. `UPSTREAM` must be reachable or the config will not be generated.
