@@ -19,7 +19,7 @@ To easily manage all proxies, you should mount your own configuration file.
 The syntax is as follows(showing all possible fields).
 
         "myblog"
-        "UPSTREAM"main.stephenafamo.com|1st.stephenafamo.com weight=3|2nd.stpehenafamo.com max_fails=3 fail_timeout=30s"
+        "UPSTREAM"main.stephenafamo.com|1st.stephenafamo.com weight=3|2nd.stephenafamo.com max_fails=3 fail_timeout=30s"
         "UPSTREAM_OPTIONS"ip_hash|keep_alive 32"
         "DOMAIN"stephenafamo.com"
         "DIRECTORY"blog"
