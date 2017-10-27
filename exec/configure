@@ -69,7 +69,7 @@ oldIFS="$IFS" # store current value of IFS
 IFS='|' read -r -a auto_config_upstream_array <<< "$auto_config_upstream" # turn to array and loop through
 for single_upstream in "${auto_config_upstream_array[@]}"
 do
-	ping -c 1 "${single_upstream% *}" > $tmpfile 2>&1 # ping the host to check if it is valid
+	ping -c 1 "${single_upstream%:*}" > $tmpfile 2>&1 # ping the host to check if it is valid
 	check_address=$(grep -m 1 "unknown host" $tmpfile)	
 
 	if [[ ! -z "$check_address" ]]; then
