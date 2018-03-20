@@ -7,7 +7,7 @@ This docker image automatic proxies requests to your docker containers
 
 First, pull the image from docker hub
 
-    docker pull stephenafamo/docker-nginx-auto-proxy:2.1.1
+    docker pull stephenafamo/docker-nginx-auto-proxy:2.1.2
 
 Run a container
 
