@@ -69,8 +69,11 @@ oldIFS="$IFS" # store current value of IFS
 IFS='|' read -r -a auto_config_upstream_array <<< "$auto_config_upstream" # turn to array and loop through
 for single_upstream in "${auto_config_upstream_array[@]}"
 do
-	ping -c 1 "${single_upstream%:*}" > $tmpfile 2>&1 # ping the host to check if it is valid
-	check_address=$(grep -m 1 "unknown host" $tmpfile)	
+	single_upstream_without_leading_whitespace="${single_upstream#"${single_upstream%%[![:space:]]*}"}" # Removing leading whitespace "}
+	single_upstream_host=${single_upstream_without_leading_whitespace%% *} # Extract just the host from the upstream definition
+
+	ping -c 1 "${single_upstream_host%:*}" > $tmpfile 2>&1 # ping the host to check if it is valid
+	check_address=$(grep -m 1 "unknown host" $tmpfile)
 
 	if [[ ! -z "$check_address" ]]; then
 		echo "upstream \"${single_upstream% *}\" cannot be reached";
