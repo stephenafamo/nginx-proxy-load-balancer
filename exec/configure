@@ -96,18 +96,18 @@ if [[ ! -z "$auto_config_upstream_options" ]]; then
 			${auto_config_upstream_options//\|/;
 			};
 		}
-		" > /etc/nginx/conf.d/"$filename"-"$auto_config_directory"-upstream.conf
+		" > /etc/nginx/conf.d/http/"$filename"-"$auto_config_directory"-upstream.conf
 else
 	echo "
 		upstream ${auto_config_name}_upstream  {
 		    server ${auto_config_upstream//\|/;
 			server };
 		}
-		" > /etc/nginx/conf.d/"$filename"-"$auto_config_directory"-upstream.conf
+		" > /etc/nginx/conf.d/http/"$filename"-"$auto_config_directory"-upstream.conf
 fi
 
 # add the server block
-if [[ ! -e /etc/nginx/conf.d/"$filename".conf ]]; then
+if [[ ! -e /etc/nginx/conf.d/http/"$filename".conf ]]; then
 	echo "
 		server {
 		    listen 80;
@@ -121,11 +121,11 @@ if [[ ! -e /etc/nginx/conf.d/"$filename".conf ]]; then
 			}
 
 		}
-		" > /etc/nginx/conf.d/"$filename".conf
+		" > /etc/nginx/conf.d/http/"$filename".conf
 fi
 
 # add location and proxy details to server block
-closingBracketLine=`expr $(wc -l /etc/nginx/conf.d/"$filename".conf | cut -d ' ' -f 1) - $(tac /etc/nginx/conf.d/"$filename".conf | grep -nm 1 } | cut -d : -f 1) + 1`
+closingBracketLine=`expr $(wc -l /etc/nginx/conf.d/http/"$filename".conf | cut -d ' ' -f 1) - $(tac /etc/nginx/conf.d/http/"$filename".conf | grep -nm 1 } | cut -d : -f 1) + 1`
 
 sed -i -e "${closingBracketLine}i\ \n\
 			location $location { \n\
@@ -135,7 +135,7 @@ sed -i -e "${closingBracketLine}i\ \n\
 		        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; \n\
 		        proxy_set_header X-Forwarded-Proto \$scheme; \n\
 		    } \
-			" /etc/nginx/conf.d/$filename.conf
+			" /etc/nginx/conf.d/http/$filename.conf
 
 if [[ "$auto_config_ssl" == "1" ]]; then
 	if [[ ! -e /etc/ssl/certs/dhparam.pem ]]; then
@@ -166,7 +166,7 @@ if [[ "$auto_config_ssl" == "1" ]]; then
 		&& [[ ! -e /etc/letsencrypt/live/"$auto_config_first_domain"/privkey.pem ]]; then
 		echo "ssl certificate error, skipping ssl configuration"	
 	else
-		if [[ ! -e /etc/nginx/conf.d/"$filename"-ssl.conf ]]; then
+		if [[ ! -e /etc/nginx/conf.d/http/"$filename"-ssl.conf ]]; then
 			echo "
 				server {
 					listen 443 ssl http2;
@@ -192,10 +192,10 @@ if [[ "$auto_config_ssl" == "1" ]]; then
 					}
 
 				}
-				" > /etc/nginx/conf.d/"$filename"-ssl.conf
+				" > /etc/nginx/conf.d/http/"$filename"-ssl.conf
 		fi
 
-		closingBracketLineSSL=`expr $(wc -l /etc/nginx/conf.d/"$filename"-ssl.conf | cut -d ' ' -f 1) - $(tac /etc/nginx/conf.d/"$filename"-ssl.conf | grep -nm 1 } | cut -d : -f 1) + 1`
+		closingBracketLineSSL=`expr $(wc -l /etc/nginx/conf.d/http/"$filename"-ssl.conf | cut -d ' ' -f 1) - $(tac /etc/nginx/conf.d/http/"$filename"-ssl.conf | grep -nm 1 } | cut -d : -f 1) + 1`
 
 		sed -i -e "${closingBracketLineSSL}i\ \n\
 					location $location { \n\
@@ -205,18 +205,18 @@ if [[ "$auto_config_ssl" == "1" ]]; then
 				        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; \n\
 				        proxy_set_header X-Forwarded-Proto \$scheme; \n\
 				    } \
-					" /etc/nginx/conf.d/"$filename"-ssl.conf
+					" /etc/nginx/conf.d/http/"$filename"-ssl.conf
 
 		if [[ "$auto_config_https_only" == "1" ]]; then
 
-			location_start=$(grep -nm 1 "location $location {" /etc/nginx/conf.d/$filename.conf | cut -d : -f 1)
-			location_length=$(tail -n +$location_start /etc/nginx/conf.d/$filename.conf | grep -nm 1 "}" | cut -d : -f 1)
+			location_start=$(grep -nm 1 "location $location {" /etc/nginx/conf.d/http/$filename.conf | cut -d : -f 1)
+			location_length=$(tail -n +$location_start /etc/nginx/conf.d/http/$filename.conf | grep -nm 1 "}" | cut -d : -f 1)
 			location_end=$(expr $location_length + $location_start - 1)
 
-			sed -i -e "$( expr $location_start + 1),$( expr $location_end - 1)d" /etc/nginx/conf.d/$filename.conf
+			sed -i -e "$( expr $location_start + 1),$( expr $location_end - 1)d" /etc/nginx/conf.d/http/$filename.conf
 
 			sed -i -e "${location_start}a\ \n\
-			return 301 https://\$host\$request_uri;" /etc/nginx/conf.d/$filename.conf
+			return 301 https://\$host\$request_uri;" /etc/nginx/conf.d/http/$filename.conf
 		fi
 
 		service nginx reload

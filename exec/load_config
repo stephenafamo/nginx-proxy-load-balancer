@@ -19,15 +19,30 @@ do
 	if [[ ! -z "$value2" ]] && [[ -z "$value3" ]]; then
 		if [[ "$value2" == "$config_array_NAME" ]]; then
 			echo "configuring $config_array_NAME"
-			configure \
-			-u "$config_array_UPSTREAM" \
-			-O "$config_array_UPSTREAM_OPTIONS" \
-			-D "$config_array_DOMAIN" \
-			-d "$config_array_DIRECTORY" \
-			-s "$config_array_SSL" \
-			-S "$config_array_SSL_SOURCE" \
-			-h "$config_array_HTTPS_ONLY" \
-			-n "$config_array_NAME"
+
+			if [[ -z "$config_array_TYPE" ]] || [[ "$config_array_TYPE" == "HTTP" ]]; then
+
+				configure \
+				-u "$config_array_UPSTREAM" \
+				-O "$config_array_UPSTREAM_OPTIONS" \
+				-D "$config_array_DOMAIN" \
+				-d "$config_array_DIRECTORY" \
+				-s "$config_array_SSL" \
+				-S "$config_array_SSL_SOURCE" \
+				-h "$config_array_HTTPS_ONLY" \
+				-n "$config_array_NAME"
+
+			elif [[ "$config_array_TYPE" == "TCP" ]] || [[ "$config_array_TYPE" == "UDP" ]]; then
+
+				configure_stream \
+				-u "$config_array_UPSTREAM" \
+				-O "$config_array_UPSTREAM_OPTIONS" \
+				-o "$config_array_SERVER_OPTIONS" \
+				-P "$config_array_PORT" \
+				-T "$config_array_TYPE" \
+				-n "$config_array_NAME"
+
+			fi
 
 			echo "configured $config_array_NAME"
 

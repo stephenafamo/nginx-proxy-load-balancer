@@ -23,6 +23,12 @@ RUN chmod 755 -R /docker/exec /docker/config
 ENV PATH="/docker/exec:${PATH}"
 
 # ------------------------------------------
+# Copy custom nginx config and create config directories
+# ------------------------------------------
+COPY nginx.conf /etc/nginx/nginx.conf
+RUN mkdir /etc/nginx/conf.d/http && mkdir /etc/nginx/conf.d/streams 
+
+# ------------------------------------------
 # copy our initilization file and set permissions
 # ------------------------------------------
 COPY init.sh /init.sh
