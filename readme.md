@@ -47,7 +47,7 @@ The syntax is as follows(showing all possible fields).
 11. `HTTPS_ONLY` If this is set to `1`, then all `http` requests will be redirected to `https`.
 12. `TYPE`: For a `http` proxy, you can omit this field or set it to `HTTP`.
 
-### TCP * UDP Load balancing
+### TCP & UDP Load balancing
 
 The syntax is as follows(showing all possible fields).
 
