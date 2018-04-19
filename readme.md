@@ -54,11 +54,9 @@ The syntax is as follows(showing all possible fields).
         "myblog"
         "UPSTREAM"main.stephenafamo.com | 1st.stephenafamo.com weight=3 | 2nd.stephenafamo.com max_fails=3 fail_timeout=30s"
         "UPSTREAM_OPTIONS"ip_hash | keepalive 32"
+        "SERVER_OPTIONS"proxy_buffer_size 16k | proxy_download_rate 0"
         "PORT"12345"
-        "SERVER_OPTIONS"blog"
-        "SSL"1"
-        "SSL_SOURCE"letsencrypt"
-        "HTTPS_ONLY"1"
+        "TYPE"TCP"
         "myblog"
 
 
