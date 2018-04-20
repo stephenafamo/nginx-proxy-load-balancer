@@ -7,11 +7,11 @@ This docker image automatic proxies requests to your docker containers
 
 First, pull the image from docker hub
 
-    docker pull stephenafamo/docker-nginx-auto-proxy:2.1.2
+    docker pull stephenafamo/docker-nginx-auto-proxy:2.2.1
 
 Run a container
 
-    docker run --name nginx -v /path/to/my/config:/docker/config/config -p 80:80 -p 443:443 stephenafamo/docker-nginx-auto-proxy:2.1.0
+    docker run --name nginx -v /path/to/my/config:/docker/config/config -p 80:80 -p 443:443 stephenafamo/docker-nginx-auto-proxy:2.2.1
 
 The container reads a configuration file `/docker/config/config`
 To easily manage all proxies, you should mount your own configuration file.
