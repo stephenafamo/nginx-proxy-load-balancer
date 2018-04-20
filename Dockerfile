@@ -5,10 +5,12 @@ LABEL maintainer="Stephen Afam-Osemene <stephenafamo@gmail.com>"
 # ------------------------------------------
 # install ping
 # ------------------------------------------
-RUN apt-get update \
+RUN echo "deb http://ftp.debian.org/debian stretch-backports main" >> /etc/apt/sources.list \
+	&& apt-get update \
 	&& apt-get install --no-install-recommends --no-install-suggests -y inetutils-ping \
 	openssl \
-	letsencrypt
+	# letsencrypt \
+	certbot -t stretch-backports
 
 # ------------------------------------------
 # Copy custom commands and give appropriate premissions
