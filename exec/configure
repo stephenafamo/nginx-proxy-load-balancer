@@ -31,6 +31,9 @@ while getopts ":u:d:s:S:h:n:D:O:" opt; do
   esac
 done
 
+# Clear all options and reset the command line
+shift $(( OPTIND -1 ))
+
 function configure_the_config(){
 #set up variables and load defaults
 [[ ! -z "$auto_config_directory" ]] || auto_config_directory="$DEFAULT_DIRECTORY" 
@@ -54,7 +57,7 @@ fi
 
 auto_config_first_domain="${auto_config_domain% *}"
 location="/"
-filename="${auto_config_first_domain% *}"
+filename="${auto_config_name% *}"
 if [[ ! -z "$auto_config_directory" ]]; then
 	location="/$auto_config_directory/"
 fi
@@ -82,10 +85,6 @@ do
 done
 
 IFS="$oldIFS" # restore IFS
-
-if [[ "$filename" == "default" ]]; then
-	filename="${filename% *}-custom"
-fi
 
 # Add the upstream block
 if [[ ! -z "$auto_config_upstream_options" ]]; then

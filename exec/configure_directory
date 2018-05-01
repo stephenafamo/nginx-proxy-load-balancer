@@ -1,0 +1,100 @@
+#!/bin/bash
+
+# get the directory to configure
+CONFIGURATION_DIR=$1
+shift
+
+while getopts ":s:m" opt; do
+  case $opt in
+    s)
+      config_service="$OPTARG";;
+    m)
+      only_modified=true;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+    :)
+      echo "Option -$OPTARG requires an argument." >&2
+      exit 1
+      ;;
+  esac
+done
+
+
+# Clear all options and reset the command line
+shift $(( OPTIND -1 ))
+
+
+
+if [[ ! -z "$config_service"  ]]; then
+
+  find $CONFIGURATION_DIR -name "*.config" -type f -exec configure_file {} -s "$config_service" \;
+
+elif [[ "$only_modified" == true ]]; then
+
+  # get all matching files in this directory and add them to the DB modified
+  find $CONFIGURATION_DIR -name "*.config" -type f -exec add_db_records {} \;
+
+  # delete missing files and the database entry
+  sqlite3 `printenv CONFIG_DB` \
+    "SELECT path FROM old_files WHERE path LIKE '${CONFIGURATION_DIR}%' AND path NOT IN (SELECT path FROM new_files WHERE path LIKE '${CONFIGURATION_DIR}%')" | \
+    while read path; do
+    find /etc/nginx/conf.d -name "$(echo $path | sha256sum | cut -d ' ' -f 1)*" -type f -exec rm -f {} \;
+  done
+
+  sqlite3 `printenv CONFIG_DB` \
+    "DELETE FROM old_files WHERE path LIKE '${CONFIGURATION_DIR}%' AND path NOT IN (SELECT path FROM new_files WHERE path LIKE '${CONFIGURATION_DIR}%')" 
+
+  # add new files 
+  sqlite3 `printenv CONFIG_DB` \
+    "SELECT path FROM new_files WHERE path LIKE '${CONFIGURATION_DIR}%' AND path NOT IN (SELECT path FROM old_files WHERE path LIKE '${CONFIGURATION_DIR}%')" | \
+    while read path; do
+    configure_file "$path"
+  done
+
+  # update old_files table with new files 
+  sqlite3 `printenv CONFIG_DB` \
+    "INSERT OR REPLACE INTO old_files (path, hash, timestamp) SELECT path, hash, timestamp FROM new_files WHERE path LIKE '${CONFIGURATION_DIR}%' AND path NOT IN (SELECT path FROM old_files WHERE path LIKE '${CONFIGURATION_DIR}%')"
+
+  # update changed files
+  sqlite3 `printenv CONFIG_DB` \
+    "SELECT new_files.path FROM new_files LEFT JOIN old_files ON new_files.path = old_files.path WHERE new_files.path LIKE '${CONFIGURATION_DIR}%' AND new_files.hash != old_files.hash" | \
+    while read path; do
+    configure_file "$path"
+  done
+
+  # update old_files table with changed files
+  sqlite3 `printenv CONFIG_DB` \
+    "INSERT OR REPLACE INTO old_files (path, hash, timestamp) SELECT new_files.path, new_files.hash, new_files.timestamp FROM new_files LEFT JOIN old_files ON new_files.path = old_files.path WHERE new_files.path LIKE '${CONFIGURATION_DIR}%' AND new_files.hash != old_files.hash" 
+
+  # update outdated files
+  sqlite3 `printenv CONFIG_DB` \
+    "SELECT new_files.path FROM new_files LEFT JOIN old_files ON new_files.path = old_files.path WHERE new_files.path LIKE '${CONFIGURATION_DIR}%' AND new_files.timestamp - old_files.timestamp > `printenv CONFIG_VALIDITY`" | \
+    while read path; do
+    configure_file "$path"
+  done 
+
+  # update old_files table with outdated files
+  sqlite3 `printenv CONFIG_DB` \
+    "INSERT OR REPLACE INTO old_files (path, hash, timestamp) SELECT new_files.path, new_files.hash, new_files.timestamp FROM new_files LEFT JOIN old_files ON new_files.path = old_files.path WHERE new_files.path LIKE '${CONFIGURATION_DIR}%' AND new_files.timestamp - old_files.timestamp > `printenv CONFIG_VALIDITY`"
+
+  # clean new_files table
+  sqlite3 `printenv CONFIG_DB` \
+    "DELETE FROM new_files WHERE path LIKE '${CONFIGURATION_DIR}%'" 
+
+else
+
+  # find all files with this directory in the path and delete them
+  sqlite3 `printenv CONFIG_DB` \
+    "SELECT path FROM old_files WHERE path LIKE '${CONFIGURATION_DIR}%'" | \
+    while read path; do
+    find /etc/nginx/conf.d -name "$(echo $path | sha256sum | cut -d ' ' -f 1)*" -type f -exec rm -f {} \;
+  done
+
+  sqlite3 `printenv CONFIG_DB` \
+    "DELETE FROM old_files WHERE path LIKE '${CONFIGURATION_DIR}%'"
+
+  # add new configurations
+  configure_directory "$CONFIGURATION_DIR" -m
+fi

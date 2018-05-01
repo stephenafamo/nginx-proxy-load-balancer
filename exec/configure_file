@@ -1,0 +1,90 @@
+#!/bin/bash
+
+# get the file to configure
+CONFIGURATION_FILE=$1
+shift
+
+while getopts ":s:" opt; do
+  case $opt in
+    s)
+      config_service="$OPTARG";;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+    :)
+      echo "Option -$OPTARG requires an argument." >&2
+      exit 1
+      ;;
+  esac
+done
+
+# Clear all options and reset the command line
+shift $(( OPTIND -1 ))
+
+# to prefix configurations
+FILE_HASH=`echo "$CONFIGURATION_FILE" | sha256sum | cut -d " " -f 1`
+
+# If no servie is specified, delete all configurations for services in current file
+if [[ -z "$config_service" ]]; then
+	find /etc/nginx/conf.d -name '"$FILE_HASH"*' -type f -exec rm -f {} \;
+fi	
+
+while read line || [ -n "$line" ]
+do
+    value1=$(echo "$line" | cut -d '"' -f 1)
+
+    value2=$(echo "$line" | cut -d '"' -f 2)
+
+    value3=$(echo "$line" | cut -d '"' -f 3)
+
+	if [[ -z "$value2" ]] && [[ -z "$value3" ]]; then
+		continue
+	fi
+
+	if [[ ! -z "$value2" ]] && [[ -z "$value3" ]]; then
+		if [[ "$value2" == "$config_array_NAME" ]]; then
+			if [[ -z "$config_service" ]] || [[ "$config_service" == "$config_array_NAME" ]]; then
+
+				echo "configuring $config_array_NAME"
+
+				if [[ -z "$config_array_TYPE" ]] || [[ "$config_array_TYPE" == "HTTP" ]]; then
+
+					configure \
+					-u "$config_array_UPSTREAM" \
+					-O "$config_array_UPSTREAM_OPTIONS" \
+					-D "$config_array_DOMAIN" \
+					-d "$config_array_DIRECTORY" \
+					-s "$config_array_SSL" \
+					-S "$config_array_SSL_SOURCE" \
+					-h "$config_array_HTTPS_ONLY" \
+					-n "$FILE_HASH"-"$config_array_NAME"
+
+				elif [[ "$config_array_TYPE" == "TCP" ]] || [[ "$config_array_TYPE" == "UDP" ]]; then
+
+					configure_stream \
+					-u "$config_array_UPSTREAM" \
+					-O "$config_array_UPSTREAM_OPTIONS" \
+					-o "$config_array_SERVER_OPTIONS" \
+					-P "$config_array_PORT" \
+					-T "$config_array_TYPE" \
+					-n "$FILE_HASH"-"$config_array_NAME"
+
+				fi
+
+				echo "configured $config_array_NAME"
+
+				while read line2; do unset "$line2"; done < <(compgen -A variable | grep "config_array")
+			fi
+		else
+			config_array_NAME="$value2"
+			continue
+		fi	
+	fi
+
+	if [[ -z "$value1" ]] && [[ ! -z "$value2" ]] && [[ ! -z "$value3" ]]; then
+		declare "config_array_$value2=$value3"
+		continue
+	fi
+
+done < $CONFIGURATION_FILE

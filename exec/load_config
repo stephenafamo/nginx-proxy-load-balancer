@@ -1,63 +1,34 @@
 #!/bin/bash
 
-cd /etc/nginx/conf.d
-find . ! -name 'default.conf' -type f -exec rm -f {} +
-cd /docker/exec
+while getopts ":s:m" opt; do
+  case $opt in
+    s)
+      config_service="$OPTARG";;
+    m)
+      only_modified=true;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+    :)
+      echo "Option -$OPTARG requires an argument." >&2
+      exit 1
+      ;;
+  esac
+done
 
-while read line || [ -n "$line" ]
-do
-    value1=$(echo "$line" | cut -d '"' -f 1)
+oldIFS="$IFS" # store current value of IFS
+IFS=':'
 
-    value2=$(echo "$line" | cut -d '"' -f 2)
+for path in `printenv CONFIG_DIR`; do
+  if [[ ! -z "$config_service"  ]]; then
+    configure_directory $path -s "$config_service"
+  elif [[ "$only_modified" == true ]]; then
+    configure_directory $path -m
+  else
+    find /etc/nginx/conf.d ! -name 'default.conf' -type f -exec rm -f {} \;
+    configure_directory $path
+  fi
+done
 
-    value3=$(echo "$line" | cut -d '"' -f 3)
-
-	if [[ -z "$value2" ]] && [[ -z "$value3" ]]; then
-		continue
-	fi
-
-	if [[ ! -z "$value2" ]] && [[ -z "$value3" ]]; then
-		if [[ "$value2" == "$config_array_NAME" ]]; then
-			echo "configuring $config_array_NAME"
-
-			if [[ -z "$config_array_TYPE" ]] || [[ "$config_array_TYPE" == "HTTP" ]]; then
-
-				configure \
-				-u "$config_array_UPSTREAM" \
-				-O "$config_array_UPSTREAM_OPTIONS" \
-				-D "$config_array_DOMAIN" \
-				-d "$config_array_DIRECTORY" \
-				-s "$config_array_SSL" \
-				-S "$config_array_SSL_SOURCE" \
-				-h "$config_array_HTTPS_ONLY" \
-				-n "$config_array_NAME"
-
-			elif [[ "$config_array_TYPE" == "TCP" ]] || [[ "$config_array_TYPE" == "UDP" ]]; then
-
-				configure_stream \
-				-u "$config_array_UPSTREAM" \
-				-O "$config_array_UPSTREAM_OPTIONS" \
-				-o "$config_array_SERVER_OPTIONS" \
-				-P "$config_array_PORT" \
-				-T "$config_array_TYPE" \
-				-n "$config_array_NAME"
-
-			fi
-
-			echo "configured $config_array_NAME"
-
-			while read line2; do unset "$line2"; done < <(compgen -A variable | grep "config_array")
-		else
-			config_array_NAME="$value2"
-			continue
-		fi	
-	fi
-
-	if [[ -z "$value1" ]] && [[ ! -z "$value2" ]] && [[ ! -z "$value3" ]]; then
-		declare "config_array_$value2=$value3"
-		continue
-	fi
-
-done < /docker/config/config
-
-service nginx reload
+IFS="$oldIFS" # restore IFS
