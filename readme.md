@@ -7,15 +7,32 @@ This docker image automatic proxies requests to your docker containers
 
 First, pull the image from docker hub
 
-    docker pull stephenafamo/docker-nginx-auto-proxy:2.2.1
+    docker pull stephenafamo/docker-nginx-auto-proxy:3.0.0
 
 Run a container
 
-    docker run --name nginx -v /path/to/my/config:/docker/config/config -p 80:80 -p 443:443 stephenafamo/docker-nginx-auto-proxy:2.2.1
+    docker run --name nginx -v /path/to/my/config/directory:/docker/config -p 80:80 -p 443:443 stephenafamo/docker-nginx-auto-proxy:3.0.0
 
-The container reads a configuration file `/docker/config/config`
-To easily manage all proxies, you should mount your own configuration file.
-`-v /path/to/my/config.txt:/docker/config/config`
+The container reads any file with the extension `.config` in `/docker/config`. You can change this folder 
+To easily manage all proxies, you should mount your own configuration directory.
+`-v /path/to/my/config/dir:/docker/config`
+
+### Variables
+
+These are the environmental variables you can use to tweak the behaviour of this image.
+
+1. `CONFIG_DIR`: This is a set of directories where the container will look for `.config` files. Multiple directories are separated with a colon `:`. Default `/docker/config`.
+2. `CONFIG_RELOAD_TIME`: This image automatically checks for changes to your configuration files. This environmental variable is used to set how long it should wait between checks. Default is `5s`.
+3. `CONFIG_VALIDITY`: Even when a configuration file does not change, it is still reloaded after a certain period of time. This is useful for things like auto-renewing letsencrypt certificates. Default `604800`(1 week).
+
+
+## Writing configuration files
+
+A configuration file is a set of defined services. You can put multiple services in a single file, and you can have multiple file in any of the configuration directories. All configuration files must end with `.config`.
+
+The parameters used to define a service are based on the type of proxy needed. HTTP or TCP/UDP. 
+
+The way to define a service is shown below.
 
 ### HTTP Proxy & Load balancing
 

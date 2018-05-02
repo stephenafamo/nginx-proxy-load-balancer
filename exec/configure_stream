@@ -97,28 +97,25 @@ else
 fi
 
 # add the server block
-if [[ ! -e /etc/nginx/conf.d/streams/"$filename".conf ]]; then
-	if [[ ! -z "$auto_config_server_options" ]]; then
-		echo "
-			server {
-			    listen $auto_config_port;
-			    proxy_pass ${auto_config_name}_upstream;
-				${auto_config_server_options//\|/;
-				};
-			}
-			" > /etc/nginx/conf.d/streams/"$filename".conf
-	else
-		echo "
-			server {
-			    listen $auto_config_port;
-			    proxy_pass ${auto_config_name}_upstream;
-			}
-			" > /etc/nginx/conf.d/streams/"$filename".conf
-	fi
+if [[ ! -z "$auto_config_server_options" ]]; then
+	echo "
+		server {
+		    listen $auto_config_port;
+		    proxy_pass ${auto_config_name}_upstream;
+			${auto_config_server_options//\|/;
+			};
+		}
+		" > /etc/nginx/conf.d/streams/"$filename".conf
+else
+	echo "
+		server {
+		    listen $auto_config_port;
+		    proxy_pass ${auto_config_name}_upstream;
+		}
+		" > /etc/nginx/conf.d/streams/"$filename".conf
 fi
-
-cat /etc/nginx/conf.d/streams/"$filename".conf
-cat /etc/nginx/conf.d/streams/"$filename"-upstream.conf
+	
+service nginx reload
 
 }
 configure_the_config

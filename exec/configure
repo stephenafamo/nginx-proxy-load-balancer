@@ -106,22 +106,22 @@ else
 fi
 
 # add the server block
-if [[ ! -e /etc/nginx/conf.d/http/"$filename".conf ]]; then
-	echo "
-		server {
-		    listen 80;
-		    listen [::]:80;
-		    server_name $auto_config_domain;
+echo "
+	server {
+	    listen 80;
+	    listen [::]:80;
+	    server_name $auto_config_domain;
 
-			location ^~ /.well-known/acme-challenge {
-				default_type "text/plain";
-				root /docker/challenge/$auto_config_first_domain;
-				allow all;
-			}
-
+		location ^~ /.well-known/acme-challenge {
+			default_type "text/plain";
+			root /docker/challenge/$auto_config_first_domain;
+			allow all;
 		}
-		" > /etc/nginx/conf.d/http/"$filename".conf
-fi
+
+	}
+	" > /etc/nginx/conf.d/http/"$filename".conf
+	
+service nginx reload
 
 # add location and proxy details to server block
 closingBracketLine=`expr $(wc -l /etc/nginx/conf.d/http/"$filename".conf | cut -d ' ' -f 1) - $(tac /etc/nginx/conf.d/http/"$filename".conf | grep -nm 1 } | cut -d : -f 1) + 1`
