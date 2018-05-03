@@ -1,9 +1,16 @@
 #!/bin/bash
 
+test_server_name=""
+for one_server_name in "$@"; do
+	test_server_name="${test_server_name} ${one_server_name}"
+done
+test_server_name="${test_server_name#"${test_server_name%%[![:space:]]*}"}" # Removing leading whitespace "}
+
+
 grep server_name /etc/nginx/* -RiI | while read details; do
 	server_name_with_semi_colon=${details##*server_name }
 	server_name=${server_name_with_semi_colon%;*}
-	if [[ "$server_name" == "$1" ]]; then
+	if [[ "$server_name" == "$test_server_name" ]]; then
 		parent_file=${details%%:*}
 		parent_file="${parent_file%.*}"
 		parent_file="${parent_file##*/}"
