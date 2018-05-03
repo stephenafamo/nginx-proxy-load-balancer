@@ -1,0 +1,13 @@
+#!/bin/bash
+
+grep server_name /etc/nginx/* -RiI | while read details; do
+	server_name_with_semi_colon=${details##*server_name }
+	server_name=${server_name_with_semi_colon%;*}
+	if [[ "$server_name" == "$1" ]]; then
+		parent_file=${details%%:*}
+		parent_file="${parent_file%.*}"
+		parent_file="${parent_file##*/}"
+		echo "$parent_file"
+		break
+	fi
+done

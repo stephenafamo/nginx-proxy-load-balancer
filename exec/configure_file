@@ -50,6 +50,23 @@ do
 
 				if [[ -z "$config_array_TYPE" ]] || [[ "$config_array_TYPE" == "HTTP" ]]; then
 
+					# clear previous dependencies
+					sqlite3 `printenv CONFIG_DB` \
+						"DELETE FROM dependent_services WHERE child_file = '$CONFIGURATION_FILE' AND child_service = '$config_array_NAME' " 
+
+					#check if it has a parent
+					config_array_PARENT=$(find_parent $config_array_DOMAIN)
+
+					#add parent & write to DB
+					if [[ ! -z "$config_array_PARENT" ]]; then
+						if [[ "$config_array_PARENT" == "${FILE_HASH}-${config_array_NAME}" ]]; then
+							config_array_PARENT=
+						else
+							sqlite3 `printenv CONFIG_DB` \
+							    "INSERT INTO dependent_services (parent, child_file, child_service) VALUES ('$config_array_PARENT', '$CONFIGURATION_FILE', '$config_array_NAME')" 
+						fi
+					fi
+
 					configure \
 					-u "$config_array_UPSTREAM" \
 					-O "$config_array_UPSTREAM_OPTIONS" \
@@ -58,7 +75,11 @@ do
 					-s "$config_array_SSL" \
 					-S "$config_array_SSL_SOURCE" \
 					-h "$config_array_HTTPS_ONLY" \
-					-n "$FILE_HASH"-"$config_array_NAME"
+					-n "${FILE_HASH}-${config_array_NAME}" \
+					-p "$config_array_PARENT"
+
+					# Check if it has children
+					reload_children "${FILE_HASH}-${config_array_NAME}"
 
 				elif [[ "$config_array_TYPE" == "TCP" ]] || [[ "$config_array_TYPE" == "UDP" ]]; then
 

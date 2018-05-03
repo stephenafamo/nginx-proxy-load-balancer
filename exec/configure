@@ -2,7 +2,7 @@
 
 while read line2; do unset "$line2"; done < <(compgen -A variable | grep "auto_config")
 
-while getopts ":u:d:s:S:h:n:D:O:" opt; do
+while getopts ":u:d:s:S:h:n:D:O:p:" opt; do
   case $opt in
     u)
       auto_config_upstream="$OPTARG";;
@@ -20,6 +20,8 @@ while getopts ":u:d:s:S:h:n:D:O:" opt; do
       auto_config_https_only="$OPTARG";;
     n)
       auto_config_name="$OPTARG";;
+    p)
+      auto_config_parent="$OPTARG";;
     \?)
       echo "Invalid option: -$OPTARG" >&2
       exit 1
@@ -33,6 +35,18 @@ done
 
 # Clear all options and reset the command line
 shift $(( OPTIND -1 ))
+
+function delete_location_blocks(){
+	if [[ -e "/etc/nginx/conf.d/http/$2.conf" ]]; then
+		# delete a previous location block if it exists
+		location_start=$(grep -nm 1 "location $1 {" /etc/nginx/conf.d/http/$2.conf | cut -d : -f 1)
+		if [[ ! -z "$location_start" ]]; then
+			location_length=$(tail -n +$location_start /etc/nginx/conf.d/http/$2.conf | grep -nm 1 "}" | cut -d : -f 1)
+			location_end=$(expr $location_length + $location_start - 1)
+			sed -i -e "$( expr $location_start ),$( expr $location_end )d" /etc/nginx/conf.d/http/$2.conf
+		fi
+	fi
+}
 
 function configure_the_config(){
 #set up variables and load defaults
@@ -58,6 +72,11 @@ fi
 auto_config_first_domain="${auto_config_domain% *}"
 location="/"
 filename="${auto_config_name% *}"
+
+if [[ ! -z "$auto_config_parent" ]]; then
+	filename="${auto_config_parent}"
+fi
+
 if [[ ! -z "$auto_config_directory" ]]; then
 	location="/$auto_config_directory/"
 fi
@@ -95,33 +114,40 @@ if [[ ! -z "$auto_config_upstream_options" ]]; then
 			${auto_config_upstream_options//\|/;
 			};
 		}
-		" > /etc/nginx/conf.d/http/"$filename"-"$auto_config_directory"-upstream.conf
+		" > /etc/nginx/conf.d/http/"${auto_config_name% *}"-upstream.conf
 else
 	echo "
 		upstream ${auto_config_name}_upstream  {
 		    server ${auto_config_upstream//\|/;
 			server };
 		}
-		" > /etc/nginx/conf.d/http/"$filename"-"$auto_config_directory"-upstream.conf
+		" > /etc/nginx/conf.d/http/"${auto_config_name% *}"-upstream.conf
 fi
 
 # add the server block
-echo "
-	server {
-	    listen 80;
-	    listen [::]:80;
-	    server_name $auto_config_domain;
+if [[ -z "$auto_config_parent" ]]; then
+	echo "
+		server {
+		    listen 80;
+		    listen [::]:80;
+		    server_name $auto_config_domain;
 
-		location ^~ /.well-known/acme-challenge {
-			default_type "text/plain";
-			root /docker/challenge/$auto_config_first_domain;
-			allow all;
+			location ^~ /.well-known/acme-challenge {
+				default_type "text/plain";
+				root /docker/challenge/$auto_config_first_domain;
+				allow all;
+			}
+
 		}
+		" > /etc/nginx/conf.d/http/"$filename".conf
 
-	}
-	" > /etc/nginx/conf.d/http/"$filename".conf
-	
-service nginx reload
+	service nginx reload
+fi
+
+delete_location_blocks "${location}" "${filename}"
+delete_location_blocks "${location}" "${filename}-ssl"
+delete_location_blocks "${location}" "${filename}"
+delete_location_blocks "${location}" "${filename}-ssl"
 
 # add location and proxy details to server block
 closingBracketLine=`expr $(wc -l /etc/nginx/conf.d/http/"$filename".conf | cut -d ' ' -f 1) - $(tac /etc/nginx/conf.d/http/"$filename".conf | grep -nm 1 } | cut -d : -f 1) + 1`
@@ -165,7 +191,8 @@ if [[ "$auto_config_ssl" == "1" ]]; then
 		&& [[ ! -e /etc/letsencrypt/live/"$auto_config_first_domain"/privkey.pem ]]; then
 		echo "ssl certificate error, skipping ssl configuration"	
 	else
-		if [[ ! -e /etc/nginx/conf.d/http/"$filename"-ssl.conf ]]; then
+
+		if [[ -z "$auto_config_parent" ]]; then
 			echo "
 				server {
 					listen 443 ssl http2;

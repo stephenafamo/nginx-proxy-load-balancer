@@ -1,0 +1,13 @@
+#!/bin/bash
+
+oldIFS="$IFS" # store current value of IFS
+IFS='|'
+
+sqlite3 `printenv CONFIG_DB` \
+	"SELECT child_file, child_service FROM dependent_services WHERE parent = '$1' " | \
+	while read details; do
+		child_details=($details)
+		source configure_file "${child_details[0]}" -s "${child_details[1]}"
+	done
+
+IFS="$oldIFS" # restore IFS

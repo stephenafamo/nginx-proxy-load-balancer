@@ -13,13 +13,6 @@ RUN echo "deb http://ftp.debian.org/debian stretch-backports main" >> /etc/apt/s
 	certbot -t stretch-backports
 
 # ------------------------------------------
-# Copy custom commands and give appropriate premissions
-# ------------------------------------------
-COPY exec /docker/exec/
-RUN mkdir /docker/config && touch /docker/config/config
-RUN chmod 755 -R /docker/exec /docker/config
-
-# ------------------------------------------
 # Set the location of executables to the path variable so they can be globally accessed
 # ------------------------------------------
 ENV PATH="/docker/exec:${PATH}"
@@ -55,6 +48,13 @@ RUN mkdir /etc/nginx/conf.d/http && mkdir /etc/nginx/conf.d/streams
 # ------------------------------------------
 COPY init.sh /init.sh
 RUN chmod 755 /init.sh
+
+# ------------------------------------------
+# Copy custom commands and give appropriate premissions
+# ------------------------------------------
+COPY exec /docker/exec/
+RUN mkdir /docker/config && touch /docker/config/config
+RUN chmod 755 -R /docker/exec /docker/config
 
 EXPOSE 443
 
