@@ -98,6 +98,7 @@ func startNginx() error {
 
 func reloadNginx() error {
 	fmt.Println("Reloading NGINX")
+	// cmd := exec.Command("service", "nginx", "reload")
 	cmd := exec.Command("nginx", "-s", "reload")
 	err := cmd.Run()
 	if err != nil {
