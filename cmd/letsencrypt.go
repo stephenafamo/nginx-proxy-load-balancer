@@ -6,7 +6,7 @@ import (
 )
 
 func getLetsEncryptCertificate(config *ConfigTemplateStruct) (string, string, error) {
-	webrootPath := fmt.Sprintf("/docker/challenge%s", config.Unique)
+	webrootPath := fmt.Sprintf("/docker/challenge/%s", config.Unique)
 
 	cmd := exec.Command("mkdir", "-p", webrootPath)
 	err := cmd.Run()

@@ -34,7 +34,7 @@ func init() {
 
 func initConfig() {
 	viper.AutomaticEnv() // read in environment variables that match
-	settings.DbPath = "~/db?_fk=1"
+	settings.DbPath = "./db?_fk=1"
 	settings.Email = viper.GetString("EMAIL")
 	settings.ConfigDir = viper.GetString("CONFIG_DIR")
 	settings.ReloadDuration = viper.GetString("CONFIG_RELOAD_TIME")

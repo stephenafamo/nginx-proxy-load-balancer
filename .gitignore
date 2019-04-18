@@ -6,3 +6,4 @@ sqlboiler.toml
 config
 db
 goinstall.sh
+warden
