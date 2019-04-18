@@ -73,7 +73,7 @@ func parseHttp(t *template.Template) error {
             location {{.Location}} {
                 proxy_pass http://{{.Unique}};
 
-                proxy_set_header Host $host;
+                proxy_set_header Host $http_host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
                 proxy_set_header X-Forwarded-Proto $scheme;
@@ -88,7 +88,7 @@ func parseHttp(t *template.Template) error {
             location {{$x.Match}} {
                 proxy_pass http://{{$.Unique}}-{{$i}};
 
-                proxy_set_header Host $host;
+                proxy_set_header Host $http_host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
                 proxy_set_header X-Forwarded-Proto $scheme;
@@ -169,7 +169,7 @@ func parseHttps(t *template.Template) error {
             location {{.Location}} {
                 proxy_pass http://{{.Unique}};
 
-                proxy_set_header Host $host;
+                proxy_set_header Host $http_host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
                 proxy_set_header X-Forwarded-Proto $scheme;
@@ -184,7 +184,7 @@ func parseHttps(t *template.Template) error {
             location {{$x.Match}} {
                 proxy_pass http://{{$.Unique}}-{{$i}};
 
-                proxy_set_header Host $host;
+                proxy_set_header Host $http_host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
                 proxy_set_header X-Forwarded-Proto $scheme;
