@@ -3,7 +3,6 @@ vendor
 start.sh
 something.sh
 sqlboiler.toml
-config
 db
 goinstall.sh
 warden
