@@ -14,22 +14,34 @@ func getLetsEncryptCertificate(config *ConfigTemplateStruct) (string, string, er
 		return "", "", fmt.Errorf("Can't make letsencrypt webroot dir: %s", err)
 	}
 
-	commandArg := fmt.Sprintf(
-		"certonly --agree-tos --email %s -q  --cert-name=%s -a webroot --webroot-path=%s", 
+	cmd = exec.Command(
+		"letsencrypt", 
+		"certonly",
+		"--agree-tos",
+		"--email",
 		settings.Email,
+		"-q",
+		"--cert-name",
 		config.Domains[0],
-		webrootPath)
+		"-a",
+		"webroot",
+		"--webroot-path",
+		webrootPath,
+	)
 
 	for _, domain := range config.Domains {
-		commandArg += " -d " + domain
+		cmd.Args = append(cmd.Args, "-d")
+		cmd.Args = append(cmd.Args, domain)
 	}
 
-	fmt.Printf("Asking for certificate:\n%s\n\n", commandArg)
-
-	cmd = exec.Command("letsencrypt", commandArg)
-	err = cmd.Run()
+	fmt.Printf("Asking for certificate for: %q\n", config.Unique)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", "", fmt.Errorf("Can't get certificate from letsencrypt: %s", err)
+		return "", "", fmt.Errorf(
+			"Can't get certificate from letsencrypt: %s: %s",
+			err,
+			output,
+		)
 	}
 
 	// default for letsencrypt
