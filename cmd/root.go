@@ -34,7 +34,7 @@ func init() {
 
 func initConfig() {
 	viper.AutomaticEnv() // read in environment variables that match
-	settings.DbPath = "./db?_fk=1"
+	settings.DbPath = "./db"
 	settings.Email = viper.GetString("EMAIL")
 	settings.ConfigDir = viper.GetString("CONFIG_DIR")
 	settings.ReloadDuration = viper.GetString("CONFIG_RELOAD_TIME")
@@ -43,15 +43,24 @@ func initConfig() {
 func rootFunc(cmd *cobra.Command, args []string) error {
 	boil.DebugMode = false
 
-	fmt.Println("running dev.sh")
-	c := exec.Command("./dev.sh")
-	err := c.Run()
+	fmt.Println("Cleaning up...")
+	c := exec.Command(
+		"/bin/sh", 
+		"-c", 
+		"rm -rf "+settings.DbPath+" /etc/nginx/conf.d/http/* /etc/nginx/conf.d/streams/*",
+	)
+
+	output, err := c.CombinedOutput()
 	if err != nil {
-		return err
+		return fmt.Errorf(
+			"Error Cleaning UP: %s: %s",
+			err,
+			output,
+		)
 	}
 
 	fmt.Println("Connecting to DB...")
-	db, err := sql.Open("sqlite3", settings.DbPath)
+	db, err := sql.Open("sqlite3", settings.DbPath+"?_fk=1")
 	if err != nil {
 		return err
 	}
@@ -86,23 +95,31 @@ func rootFunc(cmd *cobra.Command, args []string) error {
 }
 
 func startNginx() error {
-	fmt.Println("starting nginx LOL")
-	cmd := exec.Command("tail", "-f", "./dev.sh")
-	// cmd = exec.Command("service", "nginx", "reload")
-	err := cmd.Run()
+	fmt.Println("Starting NGINX")
+	cmd := exec.Command("nginx", "-g", "daemon off;")
+
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return err
+		return fmt.Errorf(
+			"Can't start NGINX: %s: %s",
+			err,
+			output,
+		)
 	}
 	return nil
 }
 
 func reloadNginx() error {
 	fmt.Println("Reloading NGINX")
-	// cmd := exec.Command("service", "nginx", "reload")
 	cmd := exec.Command("nginx", "-s", "reload")
-	err := cmd.Run()
+
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("Failed to reload NGINX %s", err)
+		return fmt.Errorf(
+			"Failed to reload NGINX: %s: %s",
+			err,
+			output,
+		)
 	}
 	return nil
 }
