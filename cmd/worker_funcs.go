@@ -141,11 +141,9 @@ func GenerateNginxConfig(db *sql.DB) {
 
 	if len(services) > 0 {
 		for _, service := range services {
-			wg.Add(1)
-			go generateHttpsConfig(db, service, &wg)
+			// has to be sequential, can only ask for one certificate at a time
+			generateHttpsConfig(db, service) 
 		}
-
-		wg.Wait()
 
 		err = reloadNginx()
 		if err != nil {
@@ -281,9 +279,8 @@ func generateBaseConfig(db *sql.DB, s *models.Service, wg *sync.WaitGroup) {
 	fmt.Printf("CONFIGURED BASE FOR: %s \n", s.Name)
 }
 
-func generateHttpsConfig(db *sql.DB, s *models.Service, wg *sync.WaitGroup) {
+func generateHttpsConfig(db *sql.DB, s *models.Service) {
 	defer r(db)
-	defer wg.Done()
 
 	var err error
 	var b bytes.Buffer
