@@ -39,6 +39,11 @@ COPY ./config/nginx.conf /etc/nginx/nginx.conf
 RUN mkdir -p /docker/config /etc/nginx/conf.d/http /etc/nginx/conf.d/streams 
 
 # ------------------------------------------
+# Remove symlink for NGINX logs
+# ------------------------------------------
+RUN rm -rf /var/log/nginx/*.log && touch /var/log/nginx/access.log /var/log/nginx/error.log
+
+# ------------------------------------------
 # Copy our warden executable
 # ------------------------------------------
 COPY --from=builder /warden /usr/bin
