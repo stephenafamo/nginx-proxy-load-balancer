@@ -1,7 +1,7 @@
 FROM golang:1.12 AS builder
 ADD . /usr/app
 WORKDIR /usr/app
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -mod vendor -a -o /warden .
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -a -o /warden .
 
 FROM nginx:1.15
 
@@ -41,8 +41,8 @@ RUN mkdir -p /docker/config /etc/nginx/conf.d/http /etc/nginx/conf.d/streams
 # ------------------------------------------
 # Copy our warden executable
 # ------------------------------------------
-COPY --from=builder /warden .
+COPY --from=builder /warden /usr/bin
 
 EXPOSE 443
 
-CMD ["./warden"]
+CMD ["warden"]
