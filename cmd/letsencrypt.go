@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os/exec"
+	"log"
 	"fmt"
 )
 
@@ -34,7 +35,7 @@ func getLetsEncryptCertificate(config *ConfigTemplateStruct) (string, string, er
 		cmd.Args = append(cmd.Args, domain)
 	}
 
-	fmt.Printf("Asking for certificate for: %q\n", config.Unique)
+	log.Printf("Asking for certificate for: %q\n", config.Unique)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", "", fmt.Errorf(

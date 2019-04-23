@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"database/sql"
+	"log"
 	"fmt"
 	"os"
 	"os/exec"
@@ -23,7 +24,7 @@ var rootCmd = &cobra.Command{
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		os.Exit(1)
 	}
 }
@@ -43,7 +44,7 @@ func initConfig() {
 func rootFunc(cmd *cobra.Command, args []string) error {
 	boil.DebugMode = false
 
-	fmt.Println("Cleaning up...")
+	log.Println("Cleaning up...")
 	c := exec.Command(
 		"/bin/sh", 
 		"-c", 
@@ -59,7 +60,7 @@ func rootFunc(cmd *cobra.Command, args []string) error {
 		)
 	}
 
-	fmt.Println("Connecting to DB...")
+	log.Println("Connecting to DB...")
 	db, err := sql.Open("sqlite3", settings.DbPath+"?_fk=1")
 	if err != nil {
 		return err
@@ -95,7 +96,7 @@ func rootFunc(cmd *cobra.Command, args []string) error {
 }
 
 func startNginx() error {
-	fmt.Println("Starting NGINX")
+	log.Println("Starting NGINX")
 	cmd := exec.Command("nginx", "-g", "daemon off;")
 
 	output, err := cmd.CombinedOutput()
@@ -110,7 +111,7 @@ func startNginx() error {
 }
 
 func reloadNginx() error {
-	fmt.Println("Reloading NGINX")
+	log.Println("Reloading NGINX")
 	cmd := exec.Command("nginx", "-s", "reload")
 
 	output, err := cmd.CombinedOutput()

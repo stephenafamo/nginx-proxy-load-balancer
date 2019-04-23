@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"fmt"
+	"log"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -117,7 +117,7 @@ func addFile(db *sql.DB, file FilePathAndInfo) error {
 		return err
 	}
 
-	fmt.Printf("ADDED: %s\n", file.Path)
+	log.Printf("ADDED: %s\n", file.Path)
 	return nil
 }
 
@@ -136,7 +136,7 @@ func updateFile(db *sql.DB, oldFile *models.File, file FilePathAndInfo) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("UPDATED: %s\n", file.Path)
+	log.Printf("UPDATED: %s\n", file.Path)
 	return nil
 }
 
@@ -168,6 +168,6 @@ func configureServices(db *sql.DB, file *models.File) error {
 		}
 	}
 
-	fmt.Printf("ADDED SERVICES FOR: %s\n", file.Path)
+	log.Printf("ADDED SERVICES FOR: %s\n", file.Path)
 	return nil
 }

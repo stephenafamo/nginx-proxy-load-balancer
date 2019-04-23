@@ -3,7 +3,7 @@ package cmd
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -20,7 +20,7 @@ type FilePathAndInfo struct {
 
 func r(db *sql.DB) {
 	if r := recover(); r != nil {
-		fmt.Println("PANIC OCCURRED:", r)
+		log.Println("PANIC OCCURRED:", r)
 		PurgeConfigFiles(db) // Used to reset all configuration
 		debug.PrintStack()
 	}
@@ -133,5 +133,5 @@ func DoConfigureFileServices(db *sql.DB, file *models.File, wg *sync.WaitGroup) 
 		panic(err)
 	}
 
-	fmt.Printf("RECONFIGURED SERVICES FOR: %s \n", file.Path)
+	log.Printf("RECONFIGURED SERVICES FOR: %s \n", file.Path)
 }

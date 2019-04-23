@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"io/ioutil"
 	"os/exec"
 	"path/filepath"
@@ -240,7 +241,7 @@ func generateBaseConfig(db *sql.DB, s *models.Service, wg *sync.WaitGroup) {
 	ok, unreachableUpstream := pingUpstreams(config)
 
 	if !ok {
-		fmt.Printf(
+		log.Printf(
 			"Cannot reach upstream %q for service %q in file %q\n",
 			unreachableUpstream,
 			s.Name,
@@ -276,7 +277,7 @@ func generateBaseConfig(db *sql.DB, s *models.Service, wg *sync.WaitGroup) {
 		panic(err)
 	}
 
-	fmt.Printf("CONFIGURED BASE FOR: %s \n", s.Name)
+	log.Printf("CONFIGURED BASE FOR: %s \n", s.Name)
 }
 
 func generateHttpsConfig(db *sql.DB, s *models.Service) {
@@ -329,7 +330,7 @@ func generateHttpsConfig(db *sql.DB, s *models.Service) {
 		panic(err)
 	}
 
-	fmt.Printf("CONFIGURED HTTPS FOR: %s \n", s.Name)
+	log.Printf("CONFIGURED HTTPS FOR: %s \n", s.Name)
 }
 
 func redirectToHttpsConfig(db *sql.DB, s *models.Service, wg *sync.WaitGroup) {
@@ -364,14 +365,14 @@ func redirectToHttpsConfig(db *sql.DB, s *models.Service, wg *sync.WaitGroup) {
 		panic(err)
 	}
 
-	fmt.Printf("CONFIGURED HTTPS ONLY FOR: %s \n", s.Name)
+	log.Printf("CONFIGURED HTTPS ONLY FOR: %s \n", s.Name)
 }
 
 func pingUpstreams(config ConfigTemplateStruct) (bool, string) {
 	for _, u := range config.Upstream {
 		host := strings.Split(u.Address, ":")[0]
 
-		fmt.Printf("PINGING %q\n", host)
+		log.Printf("PINGING %q\n", host)
 
 		cmd := exec.Command("ping", "-c", "1", host)
 		err := cmd.Run()
