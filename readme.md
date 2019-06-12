@@ -11,9 +11,10 @@ First, pull the image from docker hub
 
 Run a container
 
-    docker run --name nginx -v /path/to/my/config/directory:/docker/config -p 80:80 -p 443:443 stephenafamo/docker-nginx-auto-proxy:3.0.0
+    docker run --name nginx -v /path/to/my/config/directory:/docker/config -p 80:80 -p 443:443 stephenafamo/docker-nginx-auto-proxy:4.0.0
 
-The container reads any file with the extension `.config` in `/docker/config`. You can change this folder 
+The container reads any file with the extension `.toml` in `/docker/config`. You can change this folder using the `CONFIG_DIR` environmental variable.
+
 To easily manage all proxies, you should mount your own configuration directory.
 `-v /path/to/my/config/dir:/docker/config`
 
@@ -22,17 +23,20 @@ To easily manage all proxies, you should mount your own configuration directory.
 These are the environmental variables you can use to tweak the behaviour of this image.
 
 1. `CONFIG_DIR`: This is a set of directories where the container will look for `.config` files. Multiple directories are separated with a colon `:`. Default `/docker/config`.
-2. `CONFIG_RELOAD_TIME`: This image automatically checks for changes to your configuration files. This environmental variable is used to set how long it should wait between checks. Default is `5s`.
-3. `CONFIG_VALIDITY`: Even when a configuration file does not change, it is still reloaded after a certain period of time. This is useful for things like auto-renewing letsencrypt certificates. Default `604800`(1 week).
+2. `CONFIG_RELOAD_TIME`: This image automatically checks for changes to your configuration files. This environmental variable is used to set how long it should wait between checks. Default is `5s`. Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h". Examples of durations are:
+    * 5s: 5 seconds
+    * 1m: 1 minute
+    * 1m30s: 1 minute, 30 seconds
+    * 12h: 12 hours
+3. `CONFIG_VALIDITY`: How often the entire config should be purged and reconfigured even if there are no changes. This is useful for things like auto-renewing letsencrypt certificates. Default `604800s`(1 week).
+4. `EMAIL`: The email used to accept the TOS for getting Let's Encrypt certificates.
 
 
 ## Writing configuration files
 
-A configuration file is a set of defined services. You can put multiple services in a single file, and you can have multiple file in any of the configuration directories. All configuration files must end with `.config`.
+A configuration file is a set of defined services. You can put multiple services in a single file, and you can have multiple files in the `CONFIG_DIR` or any of its subdirectories. All configuration files must end with `.toml`.  Services are defined using the [toml format](https://github.com/toml-lang/toml).
 
 The parameters used to define a service are based on the type of proxy needed. HTTP or TCP/UDP. 
-
-The way to define a service is shown below.
 
 ### HTTP Proxy & Load balancing
 

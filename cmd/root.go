@@ -39,6 +39,7 @@ func initConfig() {
 	settings.Email = viper.GetString("EMAIL")
 	settings.ConfigDir = viper.GetString("CONFIG_DIR")
 	settings.ReloadDuration = viper.GetString("CONFIG_RELOAD_TIME")
+	settings.PurgeDuration = viper.GetString("CONFIG_VALIDITY")
 }
 
 func rootFunc(cmd *cobra.Command, args []string) error {

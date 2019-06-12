@@ -20,7 +20,7 @@ import (
 	"github.com/volatiletech/sqlboiler/queries/qm"
 )
 
-func WatchConfigDirectory(db *sql.DB) {
+func WalkConfigDirectory(db *sql.DB) {
 	defer r(db)
 	var wg sync.WaitGroup
 	var filepaths []interface{}

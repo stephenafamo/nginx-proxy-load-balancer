@@ -35,7 +35,7 @@ func startConfigDirectoryWatcher(db *sql.DB) error {
 	ticker := time.NewTicker(duration)
 	go func() {
 		for _ = range ticker.C {
-			WatchConfigDirectory(db)
+			WalkConfigDirectory(db)
 		}
 	}()
 
