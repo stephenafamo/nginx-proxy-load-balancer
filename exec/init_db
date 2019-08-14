@@ -1,8 +1,0 @@
-#!/bin/bash
-
-mkdir -p $(dirname "`printenv CONFIG_DB`")
-touch `printenv CONFIG_DB`
-echo > `printenv CONFIG_DB`
-sqlite3 `printenv CONFIG_DB` "CREATE TABLE IF NOT EXISTS old_files (path TEXT UNIQUE NOT NULL, hash TEXT NOT NULL, timestamp INTEGER NOT NULL)"
-sqlite3 `printenv CONFIG_DB` "CREATE TABLE IF NOT EXISTS new_files (path TEXT UNIQUE NOT NULL, hash TEXT NOT NULL, timestamp INTEGER NOT NULL)"
-sqlite3 `printenv CONFIG_DB` "CREATE TABLE IF NOT EXISTS dependent_services (parent TEXT NOT NULL, child_file TEXT NOT NULL, child_service TEXT NOT NULL)"

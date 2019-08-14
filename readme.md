@@ -38,6 +38,11 @@ A configuration file is a set of defined services. You can put multiple services
 
 The parameters used to define a service are based on the type of proxy needed. HTTP or TCP/UDP. 
 
+
+# REST OF THE README IS OUT OF DATE!
+
+The rest of this `readme.md` is for an older version (3.x.x). I will update it later.
+
 ### HTTP Proxy & Load balancing
 
 The syntax is as follows(showing all possible fields).
@@ -55,11 +60,10 @@ The syntax is as follows(showing all possible fields).
 
 
 1. The only required fields are `UPSTREAM` and `DOMAIN`
-1. A block of configuration should be started and ended by the configuration name. This name should be unique. In the example above, the configuration name is `myblog`
 2. Neither the domain or upstream address should include the scheme `http://`
 3. `UPSTREAM` must be reachable or the config will not be generated.
 4. For load balancing, you can add multiple `UPSTREAM` addresses. Separate them with pipes.
-5. You can add any extra parameters at the end of a single upstream server. [Read this](http://nginx.org/en/docs/http/ngx_http_upstream_module.html#server).
+5. You can add any extra parameters to upstream server using the `parameters` key. [Read this](http://nginx.org/en/docs/http/ngx_http_upstream_module.html#server).
 6. The `UPSTREAM_OPTIONS` are not required. Use only if you need to add extra directives to the upstream block for fine tuning. Separate directives with pipes. [Read this](http://nginx.org/en/docs/http/ngx_http_upstream_module.html).
 7. `DOMAIN` can be multiple, but should be seperated by spaces
 8. `DIRECTORY` is the optional path to to be proxies. For example, if you'd like to proxy only `example.com/blog`, the `blog` will be the directory

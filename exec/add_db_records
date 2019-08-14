@@ -1,4 +1,0 @@
-#!/bin/bash
-
-sqlite3 `printenv CONFIG_DB` \
-    "INSERT INTO new_files (path, hash, timestamp) VALUES ('$1', '`sha256sum $1 | cut -d " " -f 1`', '`date +%s`')" 

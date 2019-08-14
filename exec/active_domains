@@ -1,5 +1,0 @@
-#!/bin/bash
-
-while IFS= read -r j; do 
-	echo ${j#*server_name }
-done < <(nginx -Tq | grep 'server_name')
