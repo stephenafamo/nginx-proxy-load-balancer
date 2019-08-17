@@ -3,7 +3,7 @@ ADD . /usr/app
 WORKDIR /usr/app
 RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -a -o /warden .
 
-FROM nginx:1.15
+FROM nginx:1.17
 
 LABEL maintainer="Stephen Afam-Osemene <stephenafamo@gmail.com>"
 
