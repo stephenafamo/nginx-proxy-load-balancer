@@ -52,10 +52,22 @@ RUN apt-get install certbot --no-install-recommends --no-install-suggests -y \
 ENV CONFIG_DIR="/docker/config"
 
 # ------------------------------------------
-# Copy custom nginx config and create config directories
+# Set the letsencrypt credentials directory
+# ------------------------------------------
+ENV LETSENCRYPT_CREDS_DIR="/docker/letsencrypt-credentials"
+
+# ------------------------------------------
+# Copy custom nginx config
 # ------------------------------------------
 COPY ./config/nginx.conf /etc/nginx/nginx.conf
-RUN mkdir -p /docker/config /etc/nginx/conf.d/http /etc/nginx/conf.d/streams 
+
+# ------------------------------------------
+# Create config directories
+# ------------------------------------------
+RUN mkdir -p /docker/config \
+        /docker/letsencrypt-credentials \
+        /etc/nginx/conf.d/http \
+        /etc/nginx/conf.d/streams 
 
 # ------------------------------------------
 # Remove symlink for NGINX logs
