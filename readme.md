@@ -81,6 +81,6 @@ Certificates that were last configured {`HTTPS_VALIDITY`} ago will automatically
 
 * ~~Load balancing with multiple containers~~ **DONE**
 * ~~Automatic SSL support with let's encrypt~~ **DONE**
-* ~~Allow custom ssl certificate configuration.~~ **DONE
+* ~~Allow custom ssl certificate configuration~~ **DONE**
 
 Please inform me of any issues or feature requests, Pull requests are appreciated.
