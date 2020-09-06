@@ -41,7 +41,7 @@ A configuration file is a set of defined services. You can put multiple services
 
 The parameters used to define a service are based on the type of proxy needed. HTTP or TCP/UDP. 
 
-Each service should be the TOML equivalient of the [`ServiceConfig` type](https://github.com/stephenafamo/nginx-proxy-load-balancer/blob/master/internal/types.go#L36).
+Each service should be the TOML equivalient of the [`ServiceConfig` type](https://github.com/stephenafamo/nginx-proxy-load-balancer/blob/master/internal/types.go#L45).
 
 * The top level `Location`, `LocationOptions`, `Upstream`, and `UpstreamOptions` are an easy way to set only a single key in `Locations` (where `Match` == `Location`). Since many services will define only a single location, it's easier to do
 
@@ -69,7 +69,7 @@ match = "/"
 
 Both ways are completely valid though.
 
-See comments on the [`ServiceConfig` type](https://github.com/stephenafamo/nginx-proxy-load-balancer/blob/master/internal/types.go#L36). struct for details. Some examples will be added soon (PRs welcome).
+See comments on the [`ServiceConfig`](https://github.com/stephenafamo/nginx-proxy-load-balancer/blob/master/internal/types.go#L45). struct for details. Some examples will be added soon (PRs welcome).
 
 ## Let's Encrypt
 
