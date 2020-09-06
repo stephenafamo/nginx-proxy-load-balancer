@@ -245,13 +245,13 @@ func parseHttptoHttps(t *template.Template) error {
 
             {{if .Location -}}
             location {{.Location}} {
-                return 301 https://$server_name$request_uri;
+                return 301 https://$host$request_uri;
 				expires 1h;
             }
             {{- end}}
             {{range $i, $x := $.Locations }}
             location {{$x.Match}} {
-                return 301 https://$server_name$request_uri;
+                return 301 https://$host$request_uri;
 				expires 1h;
             }
             {{- end}}
