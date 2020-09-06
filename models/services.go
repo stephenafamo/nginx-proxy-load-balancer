@@ -23,59 +23,87 @@ import (
 
 // Service is an object representing the database table.
 type Service struct {
-	ID           int64      `boil:"id" json:"id" toml:"id" yaml:"id"`
-	FileID       null.Int64 `boil:"file_id" json:"file_id,omitempty" toml:"file_id" yaml:"file_id,omitempty"`
-	Name         string     `boil:"name" json:"name" toml:"name" yaml:"name"`
-	IsSSL        bool       `boil:"is_ssl" json:"is_ssl" toml:"is_ssl" yaml:"is_ssl"`
-	SSLSource    string     `boil:"ssl_source" json:"ssl_source" toml:"ssl_source" yaml:"ssl_source"`
-	Content      string     `boil:"content" json:"content" toml:"content" yaml:"content"`
-	State        string     `boil:"state" json:"state" toml:"state" yaml:"state"`
-	LastModified time.Time  `boil:"last_modified" json:"last_modified" toml:"last_modified" yaml:"last_modified"`
+	ID              int64      `boil:"id" json:"id" toml:"id" yaml:"id"`
+	FileID          null.Int64 `boil:"file_id" json:"file_id,omitempty" toml:"file_id" yaml:"file_id,omitempty"`
+	Name            string     `boil:"name" json:"name" toml:"name" yaml:"name"`
+	IsSSL           bool       `boil:"is_ssl" json:"is_ssl" toml:"is_ssl" yaml:"is_ssl"`
+	SSLSource       string     `boil:"ssl_source" json:"ssl_source" toml:"ssl_source" yaml:"ssl_source"`
+	Content         string     `boil:"content" json:"content" toml:"content" yaml:"content"`
+	State           string     `boil:"state" json:"state" toml:"state" yaml:"state"`
+	LastModified    time.Time  `boil:"last_modified" json:"last_modified" toml:"last_modified" yaml:"last_modified"`
+	HTTPSConfigured null.Time  `boil:"https_configured" json:"https_configured,omitempty" toml:"https_configured" yaml:"https_configured,omitempty"`
 
 	R *serviceR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L serviceL  `boil:"-" json:"-" toml:"-" yaml:"-"`
 }
 
 var ServiceColumns = struct {
-	ID           string
-	FileID       string
-	Name         string
-	IsSSL        string
-	SSLSource    string
-	Content      string
-	State        string
-	LastModified string
+	ID              string
+	FileID          string
+	Name            string
+	IsSSL           string
+	SSLSource       string
+	Content         string
+	State           string
+	LastModified    string
+	HTTPSConfigured string
 }{
-	ID:           "id",
-	FileID:       "file_id",
-	Name:         "name",
-	IsSSL:        "is_ssl",
-	SSLSource:    "ssl_source",
-	Content:      "content",
-	State:        "state",
-	LastModified: "last_modified",
+	ID:              "id",
+	FileID:          "file_id",
+	Name:            "name",
+	IsSSL:           "is_ssl",
+	SSLSource:       "ssl_source",
+	Content:         "content",
+	State:           "state",
+	LastModified:    "last_modified",
+	HTTPSConfigured: "https_configured",
 }
 
 // Generated where
 
+type whereHelpernull_Time struct{ field string }
+
+func (w whereHelpernull_Time) EQ(x null.Time) qm.QueryMod {
+	return qmhelper.WhereNullEQ(w.field, false, x)
+}
+func (w whereHelpernull_Time) NEQ(x null.Time) qm.QueryMod {
+	return qmhelper.WhereNullEQ(w.field, true, x)
+}
+func (w whereHelpernull_Time) IsNull() qm.QueryMod    { return qmhelper.WhereIsNull(w.field) }
+func (w whereHelpernull_Time) IsNotNull() qm.QueryMod { return qmhelper.WhereIsNotNull(w.field) }
+func (w whereHelpernull_Time) LT(x null.Time) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.LT, x)
+}
+func (w whereHelpernull_Time) LTE(x null.Time) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.LTE, x)
+}
+func (w whereHelpernull_Time) GT(x null.Time) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.GT, x)
+}
+func (w whereHelpernull_Time) GTE(x null.Time) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.GTE, x)
+}
+
 var ServiceWhere = struct {
-	ID           whereHelperint64
-	FileID       whereHelpernull_Int64
-	Name         whereHelperstring
-	IsSSL        whereHelperbool
-	SSLSource    whereHelperstring
-	Content      whereHelperstring
-	State        whereHelperstring
-	LastModified whereHelpertime_Time
+	ID              whereHelperint64
+	FileID          whereHelpernull_Int64
+	Name            whereHelperstring
+	IsSSL           whereHelperbool
+	SSLSource       whereHelperstring
+	Content         whereHelperstring
+	State           whereHelperstring
+	LastModified    whereHelpertime_Time
+	HTTPSConfigured whereHelpernull_Time
 }{
-	ID:           whereHelperint64{field: "\"services\".\"id\""},
-	FileID:       whereHelpernull_Int64{field: "\"services\".\"file_id\""},
-	Name:         whereHelperstring{field: "\"services\".\"name\""},
-	IsSSL:        whereHelperbool{field: "\"services\".\"is_ssl\""},
-	SSLSource:    whereHelperstring{field: "\"services\".\"ssl_source\""},
-	Content:      whereHelperstring{field: "\"services\".\"content\""},
-	State:        whereHelperstring{field: "\"services\".\"state\""},
-	LastModified: whereHelpertime_Time{field: "\"services\".\"last_modified\""},
+	ID:              whereHelperint64{field: "\"services\".\"id\""},
+	FileID:          whereHelpernull_Int64{field: "\"services\".\"file_id\""},
+	Name:            whereHelperstring{field: "\"services\".\"name\""},
+	IsSSL:           whereHelperbool{field: "\"services\".\"is_ssl\""},
+	SSLSource:       whereHelperstring{field: "\"services\".\"ssl_source\""},
+	Content:         whereHelperstring{field: "\"services\".\"content\""},
+	State:           whereHelperstring{field: "\"services\".\"state\""},
+	LastModified:    whereHelpertime_Time{field: "\"services\".\"last_modified\""},
+	HTTPSConfigured: whereHelpernull_Time{field: "\"services\".\"https_configured\""},
 }
 
 // ServiceRels is where relationship names are stored.
@@ -102,8 +130,8 @@ func (*serviceR) NewStruct() *serviceR {
 type serviceL struct{}
 
 var (
-	serviceAllColumns            = []string{"id", "file_id", "name", "is_ssl", "ssl_source", "content", "state", "last_modified"}
-	serviceColumnsWithoutDefault = []string{"file_id", "name", "is_ssl", "ssl_source", "content", "state", "last_modified"}
+	serviceAllColumns            = []string{"id", "file_id", "name", "is_ssl", "ssl_source", "content", "state", "last_modified", "https_configured"}
+	serviceColumnsWithoutDefault = []string{"file_id", "name", "is_ssl", "ssl_source", "content", "state", "last_modified", "https_configured"}
 	serviceColumnsWithDefault    = []string{"id"}
 	servicePrimaryKeyColumns     = []string{"id"}
 )

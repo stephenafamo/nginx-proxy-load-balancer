@@ -48,7 +48,8 @@ func createTables(db *sql.DB) error {
 		ssl_source TEXT NOT NULL,
 		content TEXT NOT NULL,
 		state TEXT NOT NULL,
-		last_modified DATETIME NOT NULL
+		last_modified DATETIME NOT NULL,
+		https_configured DATETIME 
 	);`)
 	if err != nil {
 		return err

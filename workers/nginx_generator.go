@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -22,6 +23,7 @@ import (
 	"github.com/stephenafamo/warden/internal"
 	"github.com/stephenafamo/warden/letsencrypt"
 	"github.com/stephenafamo/warden/models"
+	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 )
@@ -135,8 +137,11 @@ func (n NginxGenerator) generateHttpsConfigs(ctx context.Context) error {
 	services, err := models.Services(
 		models.ServiceWhere.State.EQ(internal.StateToConfigureHttps),
 		qm.Or2(
-			models.ServiceWhere.LastModified.LT(
-				time.Now().Add(-n.Settings.HTTPS_VALIDITY),
+			qm.Expr(
+				models.ServiceWhere.IsSSL.EQ(true),
+				models.ServiceWhere.HTTPSConfigured.LT(
+					null.TimeFrom(time.Now().Add(-n.Settings.HTTPS_VALIDITY)),
+				),
 			),
 		),
 		qm.Load(models.ServiceRels.File),
@@ -333,9 +338,17 @@ func (n NginxGenerator) generateHttpsConfig(ctx context.Context, s *models.Servi
 	}
 	configContents := b.Bytes()
 
+	configPath := filepath.Join(configDirectory, config.Unique+".SSL.conf")
+	_, err = models.NginxConfigs(models.NginxConfigWhere.Path.EQ(configPath)).DeleteAll(ctx, n.DB)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		err = fmt.Errorf("could not delete old nginx http config at %q: %w", configPath, err)
+		n.Monitor.CaptureException(err)
+		return
+	}
+
 	ngf := &models.NginxConfig{
 		Type:         fileType,
-		Path:         filepath.Join(configDirectory, config.Unique+".SSL.conf"),
+		Path:         configPath,
 		LastModified: s.LastModified,
 	}
 
@@ -380,6 +393,8 @@ func (n NginxGenerator) generateHttpsConfig(ctx context.Context, s *models.Servi
 			s.State = internal.StateToDisableHttp
 		}
 	}
+
+	s.HTTPSConfigured = null.TimeFrom(time.Now())
 
 	_, err = s.Update(ctx, tx, boil.Infer())
 	if err != nil {
