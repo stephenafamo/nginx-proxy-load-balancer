@@ -1,36 +1,55 @@
-FROM golang:1.12 AS builder
-ADD . /usr/app
+FROM golang:1.14 AS builder
+
 WORKDIR /usr/app
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -a -o /warden .
 
-FROM nginx:1.17
+ADD . .
 
-LABEL maintainer="Stephen Afam-Osemene <stephenafamo@gmail.com>"
+RUN make build
+
+
+
+
+
+
+
+FROM nginx:1.19
+
+LABEL maintainer="Stephen Afam-Osemene <me@stephenafamo.com>"
+WORKDIR /usr/app
 
 # ------------------------------------------
-# install ping
+# install necessary packages
 # ------------------------------------------
-RUN echo "deb http://ftp.debian.org/debian stretch-backports main" >> /etc/apt/sources.list \
-	&& apt-get update \
-	&& apt-get install --no-install-recommends --no-install-suggests -y inetutils-ping \
-	openssl \
-	sqlite3 \
-	certbot -t stretch-backports
+RUN apt-get update && apt-get install \
+        --no-install-recommends --no-install-suggests -y \
+        inetutils-ping \
+        openssl \
+        sqlite3 
+
+
+# ------------------------------------------
+# install certbot and its dns plugins
+# the commented out plugins do not exist in the ppa
+# ------------------------------------------
+RUN apt-get install certbot --no-install-recommends --no-install-suggests -y \
+        certbot \
+        python3-certbot-dns-cloudflare \
+        python3-certbot-dns-digitalocean \
+        python3-certbot-dns-dnsimple \
+        python3-certbot-dns-google \
+        python3-certbot-dns-linode \
+        python3-certbot-dns-ovh \
+        python3-certbot-dns-rfc2136 \
+        python3-certbot-dns-route53 
+        # python3-certbot-dns-cloudxns \
+        # python3-certbot-dns-dnsmadeeasy \
+        # python3-certbot-dns-luadns \
+        # python3-certbot-dns-nsone \
 
 # ------------------------------------------
 # Set the configuration directory
 # ------------------------------------------
 ENV CONFIG_DIR="/docker/config"
-
-# ------------------------------------------
-# Set the validity duration
-# ------------------------------------------
-ENV CONFIG_VALIDITY="30d"
-
-# ------------------------------------------
-# Set the reload duration
-# ------------------------------------------
-ENV CONFIG_RELOAD_TIME="5s"
 
 # ------------------------------------------
 # Copy custom nginx config and create config directories
@@ -44,10 +63,10 @@ RUN mkdir -p /docker/config /etc/nginx/conf.d/http /etc/nginx/conf.d/streams
 RUN rm -rf /var/log/nginx/*.log && touch /var/log/nginx/access.log /var/log/nginx/error.log
 
 # ------------------------------------------
-# Copy our warden executable
+# Copy our warden executables
 # ------------------------------------------
-COPY --from=builder /warden /usr/bin
+COPY --from=builder /usr/app/bin ./bin
 
 EXPOSE 443
 
-CMD ["warden"]
+CMD ["./bin/warden"]

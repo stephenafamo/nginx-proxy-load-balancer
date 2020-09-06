@@ -1,38 +1,38 @@
-package cmd
+package internal
 
 import (
-    "text/template"
+	"text/template"
 )
 
-var t *template.Template
+func GetTemplates() (*template.Template, error) {
+	t := template.New("configs")
 
-func init() {
-    t = template.New("configs")
+	err := parseHttp(t)
+	if err != nil {
+		panic(err)
+	}
 
-    err := parseHttp(t)
-    if err != nil {
-        panic(err)
-    }
+	err = parseStream(t)
+	if err != nil {
+		panic(err)
+	}
 
-    err = parseStream(t)
-    if err != nil {
-        panic(err)
-    }
+	err = parseHttps(t)
+	if err != nil {
+		panic(err)
+	}
 
-    err = parseHttps(t)
-    if err != nil {
-        panic(err)
-    }
+	err = parseHttptoHttps(t)
+	if err != nil {
+		panic(err)
+	}
 
-    err = parseHttptoHttps(t)
-    if err != nil {
-        panic(err)
-    }
+	return t, nil
 }
 
 func parseHttp(t *template.Template) error {
-    nt := t.New("httpBase")
-    _, err := nt.Parse(`
+	nt := t.New("httpBase")
+	_, err := nt.Parse(`
         {{- if .Location -}}
         upstream {{.Unique}} {
             {{range .Upstream }}
@@ -100,16 +100,16 @@ func parseHttp(t *template.Template) error {
             {{end}}
         }
     `)
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 
-    return nil
+	return nil
 }
 
 func parseStream(t *template.Template) error {
-    nt := t.New("streams")
-    _, err := nt.Parse(`
+	nt := t.New("streams")
+	_, err := nt.Parse(`
         upstream {{.Unique}}  {
             {{range .Upstream }}
             server {{.Address}}{{range .Parameters}} {{.}}{{end}};
@@ -129,16 +129,16 @@ func parseStream(t *template.Template) error {
             {{- end}}
         }
     `)
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 
-    return nil
+	return nil
 }
 
 func parseHttps(t *template.Template) error {
-    nt := t.New("https")
-    _, err := nt.Parse(`
+	nt := t.New("https")
+	_, err := nt.Parse(`
         server {
             listen 4343 ssl http2;
             listen [::]:4343 ssl http2;
@@ -197,16 +197,16 @@ func parseHttps(t *template.Template) error {
 
         }
     `)
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 
-    return nil
+	return nil
 }
 
 func parseHttptoHttps(t *template.Template) error {
-    nt := t.New("httptoHttps")
-    _, err := nt.Parse(`
+	nt := t.New("httptoHttps")
+	_, err := nt.Parse(`
         {{if .Location -}}
         upstream {{.Unique}} {
             {{range .Upstream }}
@@ -246,18 +246,20 @@ func parseHttptoHttps(t *template.Template) error {
             {{if .Location -}}
             location {{.Location}} {
                 return 301 https://$server_name$request_uri;
+				expires 1h;
             }
             {{- end}}
             {{range $i, $x := $.Locations }}
             location {{$x.Match}} {
                 return 301 https://$server_name$request_uri;
+				expires 1h;
             }
             {{- end}}
         }
     `)
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 
-    return nil
+	return nil
 }
