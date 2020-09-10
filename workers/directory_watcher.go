@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/stephenafamo/janus/monitor"
 	"github.com/stephenafamo/kronika"
 	"github.com/stephenafamo/warden/internal"
@@ -124,7 +124,7 @@ func (d DirectoryWatcher) addFile(ctx context.Context, file FilePathAndInfo) err
 	var fModel = models.File{
 		Name:         strings.TrimSuffix(file.Name(), filepath.Ext(file.Name())),
 		Path:         file.Path,
-		Content:      string(content),
+		Content:      content,
 		LastModified: file.ModTime(),
 		IsConfigured: false,
 	}
@@ -145,7 +145,7 @@ func (d DirectoryWatcher) updateFile(ctx context.Context, oldFile *models.File, 
 		return fmt.Errorf("error updating file: %w", err)
 	}
 
-	oldFile.Content = string(content)
+	oldFile.Content = content
 	oldFile.IsConfigured = false
 	oldFile.LastModified = file.ModTime()
 
@@ -157,11 +157,12 @@ func (d DirectoryWatcher) updateFile(ctx context.Context, oldFile *models.File, 
 	return nil
 }
 
-func getFileContent(path string) ([]byte, error) {
-	data, err := ioutil.ReadFile(path)
-	if err != nil {
-		return data, fmt.Errorf("could not read file at %q: %w", path, err)
+func getFileContent(path string) (internal.ServiceMap, error) {
+	var configs map[string]internal.Service
+	if _, err := toml.DecodeFile(path, &configs); err != nil {
+		err = fmt.Errorf("could not decode file: %w", err)
+		return nil, err
 	}
 
-	return data, nil
+	return configs, nil
 }

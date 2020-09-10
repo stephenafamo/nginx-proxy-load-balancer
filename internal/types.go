@@ -1,9 +1,13 @@
 package internal
 
 import (
+	"bytes"
+	"database/sql/driver"
 	"fmt"
 	"net/url"
 	"time"
+
+	"github.com/BurntSushi/toml"
 )
 
 type Settings struct {
@@ -27,6 +31,8 @@ type Config struct {
 	Service
 	Unique string
 }
+
+type ServiceMap map[string]Service
 
 type Service struct {
 	Type            string // HTTP, TCP default HTTP
@@ -104,4 +110,56 @@ func (w *Webhook) UnmarshalText(text []byte) error {
 
 	w.URL = *theURL
 	return nil
+}
+
+// Value implements the driver Valuer interface.
+func (u ServiceMap) Value() (driver.Value, error) {
+	buf := &bytes.Buffer{}
+	err := toml.NewEncoder(buf).Encode(u)
+	return buf.Bytes(), err
+}
+
+// Scan implements the Scanner interface.
+func (u *ServiceMap) Scan(value interface{}) error {
+	var err error
+
+	switch x := value.(type) {
+	case string:
+		_, err = toml.Decode(x, u)
+	case []byte:
+		_, err = toml.Decode(string(x), u)
+	case nil:
+		return nil
+
+	default:
+		err = fmt.Errorf("cannot scan type %T into type Service: %v", value, value)
+	}
+
+	return err
+}
+
+// Value implements the driver Valuer interface.
+func (u Service) Value() (driver.Value, error) {
+	buf := &bytes.Buffer{}
+	err := toml.NewEncoder(buf).Encode(u)
+	return buf.Bytes(), err
+}
+
+// Scan implements the Scanner interface.
+func (u *Service) Scan(value interface{}) error {
+	var err error
+
+	switch x := value.(type) {
+	case string:
+		_, err = toml.Decode(x, u)
+	case []byte:
+		_, err = toml.Decode(string(x), u)
+	case nil:
+		return nil
+
+	default:
+		err = fmt.Errorf("cannot scan type %T into type Service: %v", value, value)
+	}
+
+	return err
 }

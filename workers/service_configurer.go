@@ -1,7 +1,6 @@
 package workers
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -9,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/stephenafamo/janus/monitor"
 	"github.com/stephenafamo/kronika"
 	"github.com/stephenafamo/warden/internal"
@@ -88,29 +86,14 @@ func (s ServiceConfigurer) setFileServices(ctx context.Context) error {
 func (s ServiceConfigurer) createFileServices(ctx context.Context, file *models.File, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	var configs map[string]internal.Service
-	if _, err := toml.Decode(file.Content, &configs); err != nil {
-		err = fmt.Errorf("could not decode configs: %w", err)
-		s.Monitor.CaptureException(err)
-		return
-	}
-
 	var services = models.ServiceSlice{}
 
-	for key, config := range configs {
-		var b bytes.Buffer
-		err := toml.NewEncoder(&b).Encode(config)
-		if err != nil {
-			err = fmt.Errorf("could not encode configs: %w", err)
-			s.Monitor.CaptureException(err)
-			return
-		}
+	for key, config := range file.Content {
 
 		service := &models.Service{
 			Name:         key,
-			Content:      b.String(),
+			Content:      config,
 			IsSSL:        config.Ssl,
-			SSLSource:    config.SslSource,
 			State:        internal.StateNotConfigured,
 			LastModified: file.LastModified,
 		}

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/friendsofgo/errors"
+	"github.com/stephenafamo/warden/internal"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
@@ -22,12 +23,12 @@ import (
 
 // File is an object representing the database table.
 type File struct {
-	ID           int64     `boil:"id" json:"id" toml:"id" yaml:"id"`
-	Path         string    `boil:"path" json:"path" toml:"path" yaml:"path"`
-	Name         string    `boil:"name" json:"name" toml:"name" yaml:"name"`
-	Content      string    `boil:"content" json:"content" toml:"content" yaml:"content"`
-	IsConfigured bool      `boil:"is_configured" json:"is_configured" toml:"is_configured" yaml:"is_configured"`
-	LastModified time.Time `boil:"last_modified" json:"last_modified" toml:"last_modified" yaml:"last_modified"`
+	ID           int64               `boil:"id" json:"id" toml:"id" yaml:"id"`
+	Path         string              `boil:"path" json:"path" toml:"path" yaml:"path"`
+	Name         string              `boil:"name" json:"name" toml:"name" yaml:"name"`
+	Content      internal.ServiceMap `boil:"content" json:"content" toml:"content" yaml:"content"`
+	IsConfigured bool                `boil:"is_configured" json:"is_configured" toml:"is_configured" yaml:"is_configured"`
+	LastModified time.Time           `boil:"last_modified" json:"last_modified" toml:"last_modified" yaml:"last_modified"`
 
 	R *fileR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L fileL  `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -97,6 +98,27 @@ func (w whereHelperstring) NIN(slice []string) qm.QueryMod {
 	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
 }
 
+type whereHelperinternal_ServiceMap struct{ field string }
+
+func (w whereHelperinternal_ServiceMap) EQ(x internal.ServiceMap) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.EQ, x)
+}
+func (w whereHelperinternal_ServiceMap) NEQ(x internal.ServiceMap) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.NEQ, x)
+}
+func (w whereHelperinternal_ServiceMap) LT(x internal.ServiceMap) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.LT, x)
+}
+func (w whereHelperinternal_ServiceMap) LTE(x internal.ServiceMap) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.LTE, x)
+}
+func (w whereHelperinternal_ServiceMap) GT(x internal.ServiceMap) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.GT, x)
+}
+func (w whereHelperinternal_ServiceMap) GTE(x internal.ServiceMap) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.GTE, x)
+}
+
 type whereHelperbool struct{ field string }
 
 func (w whereHelperbool) EQ(x bool) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.EQ, x) }
@@ -131,14 +153,14 @@ var FileWhere = struct {
 	ID           whereHelperint64
 	Path         whereHelperstring
 	Name         whereHelperstring
-	Content      whereHelperstring
+	Content      whereHelperinternal_ServiceMap
 	IsConfigured whereHelperbool
 	LastModified whereHelpertime_Time
 }{
 	ID:           whereHelperint64{field: "\"files\".\"id\""},
 	Path:         whereHelperstring{field: "\"files\".\"path\""},
 	Name:         whereHelperstring{field: "\"files\".\"name\""},
-	Content:      whereHelperstring{field: "\"files\".\"content\""},
+	Content:      whereHelperinternal_ServiceMap{field: "\"files\".\"content\""},
 	IsConfigured: whereHelperbool{field: "\"files\".\"is_configured\""},
 	LastModified: whereHelpertime_Time{field: "\"files\".\"last_modified\""},
 }

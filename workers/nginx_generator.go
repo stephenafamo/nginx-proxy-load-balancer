@@ -17,7 +17,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/stephenafamo/janus/monitor"
 	"github.com/stephenafamo/kronika"
 	"github.com/stephenafamo/warden/internal"
@@ -494,12 +493,7 @@ func (n NginxGenerator) setSslCertificatePath(ctx context.Context, config *inter
 
 func (n NginxGenerator) getFullConfig(s *models.Service) (internal.Config, error) {
 	var config internal.Config
-	var service internal.Service
-
-	_, err := toml.Decode(s.Content, &service)
-	if err != nil {
-		return config, fmt.Errorf("could not decode service config from TOML: %w", err)
-	}
+	var service = s.Content
 
 	if service.Type == "" {
 		service.Type = "http"
