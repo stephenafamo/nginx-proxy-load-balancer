@@ -494,24 +494,24 @@ func (n NginxGenerator) setSslCertificatePath(ctx context.Context, config *inter
 
 func (n NginxGenerator) getFullConfig(s *models.Service) (internal.Config, error) {
 	var config internal.Config
-	var serviceConfig internal.ServiceConfig
+	var service internal.Service
 
-	_, err := toml.Decode(s.Content, &serviceConfig)
+	_, err := toml.Decode(s.Content, &service)
 	if err != nil {
 		return config, fmt.Errorf("could not decode service config from TOML: %w", err)
 	}
 
-	if serviceConfig.Type == "" {
-		serviceConfig.Type = "http"
+	if service.Type == "" {
+		service.Type = "http"
 	}
 
-	if serviceConfig.Location == "" && len(serviceConfig.Locations) == 0 {
-		serviceConfig.Location = "/"
+	if service.Location == "" && len(service.Locations) == 0 {
+		service.Location = "/"
 	}
 
 	config = internal.Config{
-		ServiceConfig: serviceConfig,
-		Unique:        s.Name + "-" + s.R.File.Name + "-" + strconv.FormatInt(s.ID, 10),
+		Service: service,
+		Unique:  s.Name + "-" + s.R.File.Name + "-" + strconv.FormatInt(s.ID, 10),
 	}
 
 	return config, nil

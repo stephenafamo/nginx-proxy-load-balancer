@@ -88,7 +88,7 @@ func (s ServiceConfigurer) setFileServices(ctx context.Context) error {
 func (s ServiceConfigurer) createFileServices(ctx context.Context, file *models.File, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	var configs map[string]internal.ServiceConfig
+	var configs map[string]internal.Service
 	if _, err := toml.Decode(file.Content, &configs); err != nil {
 		err = fmt.Errorf("could not decode configs: %w", err)
 		s.Monitor.CaptureException(err)

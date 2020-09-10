@@ -1,6 +1,10 @@
 package internal
 
-import "time"
+import (
+	"fmt"
+	"net/url"
+	"time"
+)
 
 type Settings struct {
 	TESTING bool `env:"TESTING"`
@@ -19,7 +23,50 @@ type Settings struct {
 	SENTRY_DSN string `env:"SENTRY_DSN"`
 }
 
-type Options map[string]string
+type Config struct {
+	Service
+	Unique string
+}
+
+type Service struct {
+	Type            string // HTTP, TCP default HTTP
+	Upstream        []UpstreamServer
+	UpstreamOptions Options
+
+	// Parameters for HTTP proxy type
+	// Required for this type. Domains to proxy
+	Domains []string
+
+	// Default "/". will be used as "match" for default "Locations"
+	Location        string
+	LocationOptions Options
+	Locations       []Location
+
+	Ssl       bool   // Whether to generate HTTPS configutation
+	HttpsOnly bool   // Wether to automatically redirect http to https. Default false
+	SslSource string // Required if Ssl = true. Options: manual, letsencrypt
+	CertPath  string // If using manual sslSource
+	KeyPath   string // If using manual sslSource
+	// If this is provided, the appropriate letsencrypt dns plugin is used
+	// NOTE: if using --dns-digitalocean, this should be "digitalocean" only
+	//
+	// Aside from the plugins from certbot, some other plugins have been implemented
+	// in this program (e.g. vultr)
+	LetsEncryptDNSPlugin string
+	// If these are provided, the manual certbot plugin will be used
+	// instead of the webroot or dns plugin which is automatic completed
+	// These should be paths to executables which will be the "hooks"
+	// See https://certbot.eff.org/docs/using.html#pre-and-post-validation-hooks
+	LetsEncryptAuthenticator string
+	LetsEncryptCleaner       string
+
+	// parameters for TCP/UDP proxy type
+	Port          uint    // REQUIRED for this type
+	ServerOptions Options // Optional
+
+	// A grpc endpoint to send notifications about the configuration stauts
+	Webhook *Webhook
+}
 
 type Location struct {
 	// REQUIRED: the path of the request to proxy. See
@@ -42,45 +89,19 @@ type UpstreamServer struct {
 	Parameters []string
 }
 
-type ServiceConfig struct {
-	Type            string // HTTP, TCP default HTTP
-	Upstream        []UpstreamServer
-	UpstreamOptions Options
+type Options = map[string]string
 
-	// Parameters for HTTP proxy type
-	// Required for this type. Domains to proxy
-	Domains []string
-
-	// Default "/". will be used as "match" for default "Locations"
-	Location        string
-	LocationOptions Options
-	Locations       []Location
-	Ssl             bool   // Whether to generate HTTPS configutation
-	HttpsOnly       bool   // Wether to automatically redirect http to https. Default false
-	SslSource       string // Required if Ssl = true. Options: manual, letsencrypt
-	CertPath        string // If using manual sslSource
-	KeyPath         string // If using manual sslSource
-
-	// If this is provided, the appropriate letsencrypt dns plugin is used
-	// NOTE: if using --dns-digitalocean, this should be "digitalocean" only
-	//
-	// Aside from the plugins from certbot, some other plugins have been implemented
-	// in this program (e.g. vultr)
-	LetsEncryptDNSPlugin string
-
-	// If these are provided, the manual certbot plugin will be used
-	// instead of the webroot or dns plugin which is automatic completed
-	// These should be paths to executables which will be the "hooks"
-	// See https://certbot.eff.org/docs/using.html#pre-and-post-validation-hooks
-	LetsEncryptAuthenticator string
-	LetsEncryptCleaner       string
-
-	// parameters for TCP/UDP proxy type
-	Port          uint    // REQUIRED for this type
-	ServerOptions Options // Optional
+type Webhook struct {
+	URL url.URL
 }
 
-type Config struct {
-	ServiceConfig
-	Unique string
+func (w *Webhook) UnmarshalText(text []byte) error {
+	textStr := string(text)
+	theURL, err := url.Parse(textStr)
+	if err != nil {
+		return fmt.Errorf("could not unmarshal %q into url: %w", textStr, err)
+	}
+
+	w.URL = *theURL
+	return nil
 }
