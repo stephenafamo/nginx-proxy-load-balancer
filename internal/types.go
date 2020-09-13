@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"fmt"
-	"net/url"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -70,8 +69,8 @@ type Service struct {
 	Port          uint    // REQUIRED for this type
 	ServerOptions Options // Optional
 
-	// A grpc endpoint to send notifications about the configuration stauts
-	Webhook *Webhook
+	// A http endpoint to send notifications about the configuration stauts
+	Webhook string
 }
 
 type Location struct {
@@ -96,21 +95,6 @@ type UpstreamServer struct {
 }
 
 type Options = map[string]string
-
-type Webhook struct {
-	URL url.URL
-}
-
-func (w *Webhook) UnmarshalText(text []byte) error {
-	textStr := string(text)
-	theURL, err := url.Parse(textStr)
-	if err != nil {
-		return fmt.Errorf("could not unmarshal %q into url: %w", textStr, err)
-	}
-
-	w.URL = *theURL
-	return nil
-}
 
 // Value implements the driver Valuer interface.
 func (u ServiceMap) Value() (driver.Value, error) {

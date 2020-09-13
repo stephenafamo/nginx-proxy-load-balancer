@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +19,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/stephenafamo/janus/monitor"
 	"github.com/stephenafamo/kronika"
 	"github.com/stephenafamo/warden/internal"
@@ -243,6 +246,7 @@ func (n NginxGenerator) generateBaseConfig(ctx context.Context, s *models.Servic
 
 	if !ok {
 		log.Printf("Cannot reach upstream %q for %q in %q", unreachableUpstream, s.Name, s.R.File.Path)
+		n.sendServiceEvent(s, UnreachableUpstream)
 		return
 	}
 
@@ -321,6 +325,7 @@ func (n NginxGenerator) generateHttpsConfig(ctx context.Context, s *models.Servi
 		err = n.setSslCertificatePath(ctx, &config)
 		if err != nil {
 			err = fmt.Errorf("could set SSL cert paths: %w", err)
+			n.sendServiceEvent(s, SSLCertGenerationFail)
 			n.Monitor.CaptureException(err)
 			return
 		}
@@ -537,6 +542,47 @@ func (n NginxGenerator) deleteFile(path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
 		err = fmt.Errorf("could not cleanup nginx conf file after failed query: %w", err)
+		n.Monitor.CaptureException(err)
+	}
+}
+
+type serviceEvent struct {
+	Code int    `json:"code"`
+	Msg  string `json:"message"`
+}
+
+var (
+	UnreachableUpstream = serviceEvent{
+		Code: 404,
+		Msg:  "could not reach upstream",
+	}
+	SSLCertGenerationFail = serviceEvent{
+		Code: 500,
+		Msg:  "ssl certificate generation failed",
+	}
+)
+
+func (n NginxGenerator) sendServiceEvent(service *models.Service, event serviceEvent) {
+	if service.Content.Webhook == "" {
+		return
+	}
+	var b bytes.Buffer
+	err := toml.NewEncoder(&b).Encode(service.Content)
+	if err != nil {
+		err = fmt.Errorf("could not encode service config: %w", err)
+		n.Monitor.CaptureException(err)
+	}
+
+	values := url.Values{}
+	values.Set("id", service.Name)
+	values.Set("data", b.String())
+	values.Set("event_code", strconv.Itoa(event.Code))
+	values.Set("event_msg", event.Msg)
+
+	client := http.Client{Timeout: 5 * time.Second}
+	_, err = client.PostForm(service.Content.Webhook, values)
+	if err != nil {
+		err = fmt.Errorf("error sending event to webhook: %w", err)
 		n.Monitor.CaptureException(err)
 	}
 }
