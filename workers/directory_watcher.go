@@ -62,9 +62,13 @@ func (d DirectoryWatcher) WalkConfigDirectory(ctx context.Context) error {
 	}
 	wg.Wait()
 
-	_, err = models.Files(
-		models.FileWhere.Path.NIN(filepaths),
-	).DeleteAll(ctx, d.DB)
+	// Delete all files if there's no filepaths
+	query := models.Files()
+	if len(filepaths) > 0 {
+		query = models.Files(models.FileWhere.Path.NIN(filepaths))
+	}
+
+	_, err = query.DeleteAll(ctx, d.DB)
 	if err != nil {
 		return fmt.Errorf("error deleting redundant filepaths: %w", err)
 	}
