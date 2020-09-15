@@ -14,7 +14,6 @@ type Settings struct {
 
 	EMAIL string `env:"EMAIL,required"` // for Let's Encrypt
 
-	DB_PATH            string        `env:"DB_PATH,default=./db"`
 	CONFIG_DIR         string        `env:"CONFIG_DIR,default=./config"`
 	CONFIG_RELOAD_TIME time.Duration `env:"CONFIG_RELOAD_TIME,default=5s"`
 	HTTPS_VALIDITY     time.Duration `env:"HTTPS_VALIDITY,default=168h"` // 7 days

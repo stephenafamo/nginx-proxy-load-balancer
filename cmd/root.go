@@ -30,8 +30,7 @@ func Execute(settings internal.Settings) {
 				"/bin/sh",
 				"-c",
 				fmt.Sprintf(
-					"rm -rf %s %s %s",
-					settings.DB_PATH,
+					"rm -rf %s %s",
 					filepath.Join(settings.CONFIG_OUTPUT_DIR, "/http/*"),
 					filepath.Join(settings.CONFIG_OUTPUT_DIR, "/streams/*"),
 				),
@@ -47,10 +46,11 @@ func Execute(settings internal.Settings) {
 			}
 
 			log.Println("Connecting to DB...")
-			db, err := sql.Open("sqlite3", settings.DB_PATH+"?_fk=1")
+			db, err := sql.Open("sqlite3", "file::memory:?_fk=1&cache=shared&mode=memory")
 			if err != nil {
 				return err
 			}
+			db.SetMaxOpenConns(1)
 			defer db.Close()
 
 			log.Println("Creating tables...")
