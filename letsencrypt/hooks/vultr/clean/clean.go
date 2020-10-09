@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/bobesa/go-domain-util/domainutil"
 	"github.com/joho/godotenv"
 	"github.com/sethvargo/go-envconfig"
 	"github.com/vultr/govultr"
@@ -36,8 +37,16 @@ func main() {
 	}
 
 	log.Printf("deleting DNS record for %q", config.CERTBOT_DOMAIN)
+
 	vultrClient := govultr.NewClient(nil, config.VULTR_API_KEY)
-	records, err := vultrClient.DNSRecord.List(ctx, config.CERTBOT_DOMAIN)
+
+	rootDomain := domainutil.Domain(config.CERTBOT_DOMAIN)
+	recordName := "_acme-challenge"
+	if domainutil.HasSubdomain(config.CERTBOT_DOMAIN) {
+		recordName += "." + domainutil.Subdomain(config.CERTBOT_DOMAIN)
+	}
+
+	records, err := vultrClient.DNSRecord.List(ctx, rootDomain)
 	if err != nil {
 		err = fmt.Errorf("could not list dns records for %q: %w", config.CERTBOT_DOMAIN, err)
 		panic(err)
@@ -45,7 +54,7 @@ func main() {
 
 	var recordID int
 	for _, record := range records {
-		if record.Name == "_acme-challenge" {
+		if record.Name == recordName {
 			recordID = record.RecordID
 			break
 		}

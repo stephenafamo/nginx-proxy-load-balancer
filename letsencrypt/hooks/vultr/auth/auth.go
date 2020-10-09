@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/bobesa/go-domain-util/domainutil"
 	"github.com/joho/godotenv"
 	"github.com/sethvargo/go-envconfig"
 	"github.com/stephenafamo/kronika"
@@ -40,12 +41,20 @@ func main() {
 	}
 
 	log.Printf("Creating DNS record for %q", config.CERTBOT_DOMAIN)
+
 	vultrClient := govultr.NewClient(nil, config.VULTR_API_KEY)
+
+	rootDomain := domainutil.Domain(config.CERTBOT_DOMAIN)
+	recordName := "_acme-challenge"
+	if domainutil.HasSubdomain(config.CERTBOT_DOMAIN) {
+		recordName += "." + domainutil.Subdomain(config.CERTBOT_DOMAIN)
+	}
+
 	err = vultrClient.DNSRecord.Create(
 		ctx,
-		config.CERTBOT_DOMAIN,
+		rootDomain,
 		"TXT",
-		"_acme-challenge",
+		recordName,
 		fmt.Sprintf("%q", config.CERTBOT_VALIDATION),
 		config.LETSENCRYPT_DNS_PROPAGATION, 0)
 	if err != nil {
