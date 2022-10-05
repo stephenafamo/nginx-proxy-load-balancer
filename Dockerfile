@@ -1,4 +1,4 @@
-FROM golang:1.14 AS builder
+FROM golang:1.19 AS builder
 
 WORKDIR /usr/app
 
@@ -12,7 +12,7 @@ RUN make build
 
 
 
-FROM nginx:1.19
+FROM nginx:1.23
 
 LABEL maintainer="Stephen Afam-Osemene <me@stephenafamo.com>"
 WORKDIR /usr/app
@@ -21,10 +21,10 @@ WORKDIR /usr/app
 # install necessary packages
 # ------------------------------------------
 RUN apt-get update && apt-get install \
-        --no-install-recommends --no-install-suggests -y \
-        inetutils-ping \
-        openssl \
-        sqlite3 
+    --no-install-recommends --no-install-suggests -y \
+    inetutils-ping \
+    openssl \
+    sqlite3 
 
 
 # ------------------------------------------
@@ -32,19 +32,19 @@ RUN apt-get update && apt-get install \
 # the commented out plugins do not exist in the ppa
 # ------------------------------------------
 RUN apt-get install certbot --no-install-recommends --no-install-suggests -y \
-        certbot \
-        python3-certbot-dns-cloudflare \
-        python3-certbot-dns-digitalocean \
-        python3-certbot-dns-dnsimple \
-        python3-certbot-dns-google \
-        python3-certbot-dns-linode \
-        python3-certbot-dns-ovh \
-        python3-certbot-dns-rfc2136 \
-        python3-certbot-dns-route53 
-        # python3-certbot-dns-cloudxns \
-        # python3-certbot-dns-dnsmadeeasy \
-        # python3-certbot-dns-luadns \
-        # python3-certbot-dns-nsone \
+    certbot \
+    python3-certbot-dns-cloudflare \
+    python3-certbot-dns-digitalocean \
+    python3-certbot-dns-dnsimple \
+    python3-certbot-dns-google \
+    python3-certbot-dns-linode \
+    python3-certbot-dns-ovh \
+    python3-certbot-dns-rfc2136 \
+    python3-certbot-dns-route53 
+# python3-certbot-dns-cloudxns \
+# python3-certbot-dns-dnsmadeeasy \
+# python3-certbot-dns-luadns \
+# python3-certbot-dns-nsone \
 
 # ------------------------------------------
 # Set the configuration directory
@@ -65,9 +65,9 @@ COPY ./config/nginx.conf /etc/nginx/nginx.conf
 # Create config directories
 # ------------------------------------------
 RUN mkdir -p /docker/config \
-        /docker/letsencrypt-credentials \
-        /etc/nginx/conf.d/http \
-        /etc/nginx/conf.d/streams 
+    /docker/letsencrypt-credentials \
+    /etc/nginx/conf.d/http \
+    /etc/nginx/conf.d/streams 
 
 # ------------------------------------------
 # Remove symlink for NGINX logs
