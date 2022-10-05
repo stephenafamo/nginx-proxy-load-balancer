@@ -12,7 +12,7 @@ RUN make build
 
 
 
-FROM nginx:1.23
+FROM nginx:1.23 AS nginx-base
 
 LABEL maintainer="Stephen Afam-Osemene <me@stephenafamo.com>"
 WORKDIR /usr/app
