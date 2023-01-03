@@ -1,5 +1,4 @@
 dev.sh
-vendor
 start.sh
 something.sh
 sqlboiler.toml
