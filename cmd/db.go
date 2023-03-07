@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"database/sql"
-
-	_ "modernc.org/sqlite"
 )
 
 const (
