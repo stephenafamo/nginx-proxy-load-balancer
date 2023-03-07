@@ -3,7 +3,7 @@ package cmd
 import (
 	"database/sql"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 const (
@@ -14,7 +14,6 @@ const (
 )
 
 func createTables(db *sql.DB) error {
-
 	tx, err := db.Begin()
 	if err != nil {
 		return err

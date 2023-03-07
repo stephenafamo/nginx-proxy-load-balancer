@@ -13,18 +13,18 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stephenafamo/orchestra"
 	"github.com/stephenafamo/warden/internal"
+	_ "modernc.org/sqlite"
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute(settings internal.Settings) {
 	// rootCmd represents the base command when called without any subcommands
-	var rootCmd = &cobra.Command{
+	rootCmd := &cobra.Command{
 		Use:   "warden",
 		Short: "Setup and manage a reverse proxy",
 		Long:  "Setup and manage a reverse proxy",
 		RunE: func(cmd *cobra.Command, args []string) error {
-
 			log.Println("Cleaning up...")
 			c := exec.Command(
 				"/bin/sh",
@@ -46,7 +46,7 @@ func Execute(settings internal.Settings) {
 			}
 
 			log.Println("Connecting to DB...")
-			db, err := sql.Open("sqlite3", "file::memory:?_fk=1&cache=shared&mode=memory")
+			db, err := sql.Open("sqlite", "file::memory:?_fk=1&cache=shared&mode=memory")
 			if err != nil {
 				return err
 			}
