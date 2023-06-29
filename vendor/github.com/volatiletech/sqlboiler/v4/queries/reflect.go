@@ -7,6 +7,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -76,6 +77,9 @@ func (q *Query) BindG(ctx context.Context, obj interface{}) error {
 //   - If the ",bind" option is specified on a struct field and that field
 //     is a struct itself, it will be recursed into to look for fields for
 //     binding.
+//   - If one or more boil struct tags are duplicated and there are multiple
+//     matching columns for those tags the behaviour of Bind will be undefined
+//     for those fields with duplicated struct tags.
 //
 // Example usage:
 //
@@ -247,7 +251,7 @@ Rows:
 		case kindSliceStruct:
 			pointers = PtrsFromMapping(oneStruct, mapping)
 		case kindPtrSliceStruct:
-			newStruct = reflect.New(structType)
+			newStruct = makeStructPtr(structType)
 			pointers = PtrsFromMapping(reflect.Indirect(newStruct), mapping)
 		}
 		if err != nil {
@@ -273,6 +277,27 @@ Rows:
 	}
 
 	return nil
+}
+
+// makeStructPtr takes a struct type and returns a pointer to a new instance of it. This is used by bind to allocate new
+// slice elements when the bound-to variable is []*Struct
+func makeStructPtr(typ reflect.Type) reflect.Value {
+	// Allocate struct
+	val := reflect.New(typ)
+
+	// For all the fields
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		_, recurse := getBoilTag(field)
+
+		// If ",bind" was in the tag and the field is a pointer
+		if recurse && field.Type.Kind() == reflect.Ptr {
+			// Then allocate the field
+			val.Elem().Field(i).Set(reflect.New(field.Type.Elem()))
+		}
+	}
+
+	return val
 }
 
 // BindMapping creates a mapping that helps look up the pointer for the
@@ -514,6 +539,14 @@ func Equal(a, b interface{}) bool {
 		return false
 	}
 
+	// If either is string and another is numeric, try to parse string as numeric
+	if as, ok := a.(string); ok && isNumeric(b) {
+		a = parseNumeric(as, reflect.TypeOf(b))
+	}
+	if bs, ok := b.(string); ok && isNumeric(a) {
+		b = parseNumeric(bs, reflect.TypeOf(a))
+	}
+
 	a = upgradeNumericTypes(a)
 	b = upgradeNumericTypes(b)
 
@@ -531,6 +564,56 @@ func Equal(a, b interface{}) bool {
 	}
 
 	return false
+}
+
+// isNumeric tests if i is a numeric value.
+func isNumeric(i interface{}) bool {
+	switch i.(type) {
+	case int,
+		int8,
+		int16,
+		int32,
+		int64,
+		uint,
+		uint8,
+		uint16,
+		uint32,
+		uint64,
+		float32,
+		float64:
+		return true
+	}
+	return false
+}
+
+// parseNumeric tries to parse s as t.
+// t must be a numeric type.
+func parseNumeric(s string, t reflect.Type) interface{} {
+	var (
+		res interface{}
+		err error
+	)
+	switch t.Kind() {
+	case reflect.Int,
+		reflect.Int8,
+		reflect.Int16,
+		reflect.Int32,
+		reflect.Int64:
+		res, err = strconv.ParseInt(s, 0, t.Bits())
+	case reflect.Uint,
+		reflect.Uint8,
+		reflect.Uint16,
+		reflect.Uint32,
+		reflect.Uint64:
+		res, err = strconv.ParseUint(s, 0, t.Bits())
+	case reflect.Float32,
+		reflect.Float64:
+		res, err = strconv.ParseFloat(s, t.Bits())
+	}
+	if err != nil {
+		panic(fmt.Sprintf("tries to parse %q as %s but got error: %+v", s, t.String(), err))
+	}
+	return res
 }
 
 // Assign assigns a value to another using reflection.
@@ -566,7 +649,7 @@ func Assign(dst, src interface{}) {
 		src = upgradeNumericTypes(src)
 
 		if err := scan.Scan(src); err != nil {
-			panic(fmt.Sprintf("tried to call Scan on %T with %#v but got err: %+v", dst, val, err))
+			panic(fmt.Sprintf("tried to call Scan on %T with %#v but got err: %+v", dst, src, err))
 		}
 
 	case !isDstScanner && isSrcValuer:

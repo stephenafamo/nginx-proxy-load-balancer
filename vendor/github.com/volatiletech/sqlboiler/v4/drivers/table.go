@@ -1,6 +1,8 @@
 package drivers
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // Table metadata from the database schema.
 type Table struct {
@@ -17,6 +19,15 @@ type Table struct {
 
 	ToOneRelationships  []ToOneRelationship  `json:"to_one_relationships"`
 	ToManyRelationships []ToManyRelationship `json:"to_many_relationships"`
+
+	// For views
+	IsView           bool             `json:"is_view"`
+	ViewCapabilities ViewCapabilities `json:"view_capabilities"`
+}
+
+type ViewCapabilities struct {
+	CanInsert bool `json:"can_insert"`
+	CanUpsert bool `json:"can_upsert"`
 }
 
 // GetTable by name. Panics if not found (for use in templates mostly).
@@ -65,10 +76,25 @@ func (t Table) CanLastInsertID() bool {
 	return true
 }
 
-func (t Table) CanSoftDelete() bool {
+func (t Table) CanSoftDelete(deleteColumn string) bool {
+	if deleteColumn == "" {
+		deleteColumn = "deleted_at"
+	}
+
 	for _, column := range t.Columns {
-		if column.Name == "deleted_at" && column.Type == "null.Time" {
+		if column.Name == deleteColumn && column.Type == "null.Time" {
 			return true
+		}
+	}
+	return false
+}
+
+func TablesHaveNullableEnums(tables []Table) bool {
+	for _, table := range tables {
+		for _, col := range table.Columns {
+			if col.Nullable && IsEnumDBType(col.DBType) {
+				return true
+			}
 		}
 	}
 	return false

@@ -130,11 +130,13 @@ Table of Contents
 - 1d arrays, json, hstore & more
 - Enum types
 - Out of band driver support
+- Support for database views
+- Supports generated/computed columns
 
 ### Missing features
 
 - Multi-column foreign key support
-- View/Materialized view support
+- Materialized view support
 
 ### Supported Databases
 
@@ -143,7 +145,7 @@ Table of Contents
 | PostgreSQL        | [https://github.com/volatiletech/sqlboiler/v4/drivers/sqlboiler-psql](drivers/sqlboiler-psql)
 | MySQL             | [https://github.com/volatiletech/sqlboiler/v4/drivers/sqlboiler-mysql](drivers/sqlboiler-mysql)
 | MSSQLServer 2012+ | [https://github.com/volatiletech/sqlboiler/v4/drivers/sqlboiler-mssql](drivers/sqlboiler-mssql)
-| SQLite3           | https://github.com/volatiletech/sqlboiler-sqlite3
+| SQLite3           | [https://github.com/volatiletech/sqlboiler/v4/drivers/sqlboiler-sqlite3](drivers/sqlboiler-sqlite3)
 | CockroachDB       | https://github.com/glerchundi/sqlboiler-crdb
 
 **Note:** SQLBoiler supports out of band driver support so you can make your own
@@ -222,9 +224,6 @@ fmt.Println(len(users.R.FavoriteMovies))
 ### Requirements
 
 * Go 1.13, older Go versions are not supported.
-* Table names and column names should use `snake_case` format.
-  * We require `snake_case` table names and column names. This is a recommended default in Postgres,
-  and we agree that it's good form, so we're enforcing this format for all drivers for the time being.
 * Join tables should use a *composite primary key*.
   * For join tables to be used transparently for relationships your join table must have
   a *composite primary key* that encompasses both foreign table foreign keys and
@@ -273,17 +272,25 @@ different though everything else should remain similar.
 
 #### Download
 
-To install the latest versions run the commands below. Thes GO111MODULE
-environment variable is to ensure that you don't accidentally add this to
-your current directory's module. See go issue:
-https://github.com/golang/go/issues/30515
+First you have to install the code generator binaries. There's the main binary
+and then a separate driver binary (select the right one for your database).
+
+Be very careful when installing, there's confusion in the Go ecosystem and
+knowing what are the right commands to run for which Go version can be tricky.
+Ensure you don't forget any /v suffixes or you'll end up on an old version.
 
 ```shell
-# Install sqlboiler v4
-GO111MODULE=off go get -u -t github.com/volatiletech/sqlboiler
-# Install an sqlboiler driver - these are seperate binaries, here we are
-# choosing postgresql
-GO111MODULE=off go get github.com/volatiletech/sqlboiler/drivers/sqlboiler-psql
+# Go 1.16 and above:
+go install github.com/volatiletech/sqlboiler/v4@latest
+go install github.com/volatiletech/sqlboiler/v4/drivers/sqlboiler-psql@latest
+
+# Go 1.15 and below:
+# Install sqlboiler v4 and the postgresql driver (mysql, mssql, sqlite3 also available)
+# NOTE: DO NOT run this inside another Go module (like your project) as it will
+# pollute your go.mod with a bunch of stuff you don't want and your binary
+# will not get installed.
+GO111MODULE=on go get -u -t github.com/volatiletech/sqlboiler/v4
+GO111MODULE=on go get github.com/volatiletech/sqlboiler/v4/drivers/sqlboiler-psql
 ```
 
 To install `sqlboiler` as a dependency in your project use the commands below
@@ -291,10 +298,9 @@ inside of your go module's directory tree. This will install the dependencies
 into your `go.mod` file at the correct version.
 
 ```shell
-# Do not forget the trailing /v4
+# Do not forget the trailing /v4 and /v8 in the following commands
 go get github.com/volatiletech/sqlboiler/v4
 # Assuming you're going to use the null package for its additional null types
-# Do not forget the trailing /v8
 go get github.com/volatiletech/null/v8
 ```
 
@@ -352,10 +358,11 @@ Example of whitelist/blacklist:
 
 ```toml
 [psql]
-# Removes migrations table, and the name column from the addresses table
-# from being generated. Foreign keys that reference tables or columns that
-# are no longer generated because of whitelists or blacklists may cause problems.
-blacklist = ["migrations", "addresses.name"]
+# Removes migrations table, the name column from the addresses table, and
+# secret_col of any table from being generated. Foreign keys that reference tables
+# or columns that are no longer generated because of whitelists or blacklists may
+# cause problems.
+blacklist = ["migrations", "addresses.name", "*.secret_col"]
 ```
 
 ##### Generic config options
@@ -371,6 +378,8 @@ not to pass them through the command line or environment variables:
 | debug               | false     |
 | add-global-variants | false     |
 | add-panic-variants  | false     |
+| add-enum-types      | false     |
+| enum-null-prefix    | "Null"    |
 | no-context          | false     |
 | no-hooks            | false     |
 | no-tests            | false     |
@@ -385,6 +394,7 @@ not to pass them through the command line or environment variables:
 output   = "my_models"
 wipe     = true
 no-tests = true
+add-enum-types = true
 
 [psql]
   dbname = "dbname"
@@ -432,6 +442,8 @@ Flags:
       --add-global-variants        Enable generation for global variants
       --add-panic-variants         Enable generation for panic variants
       --add-soft-deletes           Enable soft deletion by updating deleted_at timestamp
+      --add-enum-types             Enable generation of types for enums
+      --enum-null-prefix           Name prefix of nullable enum types (default "Null")
   -c, --config string              Filename of config file to override default lookup
   -d, --debug                      Debug mode prints stack traces on error
   -h, --help                       help for sqlboiler
@@ -447,7 +459,7 @@ Flags:
       --struct-tag-casing string   Decides the casing for go structure tag names. camel, title, alias or snake (default "snake")
   -t, --tag strings                Struct tags to be included on your models in addition to json, yaml, toml
       --tag-ignore strings         List of column names that should have tags values set to '-' (ignored during parsing)
-      --templates strings          A templates directory, overrides the bindata'd template folders in sqlboiler
+      --templates strings          A templates directory, overrides the embedded template folders in sqlboiler
       --version                    Print the version
       --wipe                       Delete the output folder (rm -rf) before generation to ensure sanity
 ```
@@ -630,6 +642,32 @@ down_singular = "teamName"
   foreign = "Videos"
 ```
 
+##### Inflections
+
+With inflections, you can control the rules sqlboiler uses to generates singular/plural variants. This is useful if a certain word or suffix is used multiple times and you do not want to create aliases for every instance.
+
+```toml
+[inflections.plural]
+# Rules to convert a suffix to its plural form
+ium = "ia"
+
+[inflections.plural_exact]
+# Rules to convert an exact word to its plural form
+stadium = "stadia"
+
+[inflections.singular]
+# Rules to convert a suffix to its singular form
+ia = "ium"
+
+[inflections.singular_exact]
+# Rules to convert an exact word to its singular form
+stadia = "stadium"
+
+[inflections.irregular]
+# The singular -> plural mapping of an exact word that doen't follow conventional rules
+radius = "radii"
+```
+
 ##### Types
 
 There exists the ability to override types that the driver has inferred.
@@ -756,7 +794,7 @@ output_dir/
     └── jssingle.js
 ```
 
-**Note**: Because the `--templates` flag overrides the internal bindata of `sqlboiler`, if you still
+**Note**: Because the `--templates` flag overrides the embedded templates of `sqlboiler`, if you still
 wish to generate the default templates it's recommended that you include the path to sqlboiler's templates
 as well.
 
@@ -948,7 +986,6 @@ type Pilot struct {
 }
 
 type pilotR struct {
-  Licenses  LicenseSlice
   Languages LanguageSlice
   Jets      JetSlice
 }
@@ -998,6 +1035,16 @@ To disable this feature use `--no-auto-timestamps`.
 
 Note: You can set the timezone for this feature by calling `boil.SetLocation()`
 
+#### Customizing the timestamp columns
+
+Set the `auto-columns` map in your configuration file
+
+```toml
+[auto-columns]
+    created = "createdAt"
+    updated = "updatedAt"
+```
+
 #### Skipping Automatic Timestamps
 
 If for a given query you do not want timestamp columns to be re-computed prior
@@ -1039,6 +1086,10 @@ for soft-deletion.
 
 *NOTE*: As of writing soft-delete is opt-in via `--add-soft-deletes` and is
 liable to change in future versions.
+
+*NOTE*: There is a query mod to bypass soft delete for a specific query by using
+`qm.WithDeleted`, note that there is no way to do this for Exists/Find helpers
+yet.
 
 *NOTE*: The `Delete` helpers will _not_ set `updated_at` currently. The current
 philosophy is that deleting the object is simply metadata and since it returns
@@ -1129,18 +1180,18 @@ Where("(name=? and age=?) or (age=?)", "John", 5, 6)
 Where(
   Expr(
     models.PilotWhere.Name.EQ("John"),
-    Or2(models.PilotWhere.Age.Eq(5),
+    Or2(models.PilotWhere.Age.EQ(5)),
   ),
   Or2(models.PilotAge),
 )
 
 // WHERE IN clause building
-WhereIn("name, age in ?", "John", 24, "Tim", 33) // Generates: WHERE ("name","age") IN (($1,$2),($3,$4))
-WhereIn(fmt.Sprintf("%s, %s in ?", models.PilotColumns.Name, models.PilotColumns.Age, "John", 24, "Tim", 33))
+WhereIn("(name, age) in ?", "John", 24, "Tim", 33) // Generates: WHERE ("name","age") IN (($1,$2),($3,$4))
+WhereIn(fmt.Sprintf("(%s, %s) in ?", models.PilotColumns.Name, models.PilotColumns.Age), "John", 24, "Tim", 33)
 AndIn("weight in ?", 84)
 AndIn(models.PilotColumns.Weight + " in ?", 84)
 OrIn("height in ?", 183, 177, 204)
-OrIn(models.PilotColumns.Height + " in ?"), 183, 177, 204)
+OrIn(models.PilotColumns.Height + " in ?", 183, 177, 204)
 
 InnerJoin("pilots p on jets.pilot_id=?", 10)
 InnerJoin(models.TableNames.Pilots + " p on " + models.TableNames.Jets + "." + models.JetColumns.PilotID + "=?", 10)
@@ -1262,12 +1313,12 @@ type PilotAndJet struct {
 
 var paj PilotAndJet
 // Use a raw query
-err := queries.Raw(db, `
+err := queries.Raw(`
   select pilots.id as "pilots.id", pilots.name as "pilots.name",
   jets.id as "jets.id", jets.pilot_id as "jets.pilot_id",
   jets.age as "jets.age", jets.name as "jets.name", jets.color as "jets.color"
   from pilots inner join jets on jets.pilot_id=?`, 23,
-).Bind(&paj)
+).Bind(ctx, db, &paj)
 
 // Use query building
 err := models.NewQuery(
@@ -1411,7 +1462,7 @@ about or are not supported by your database.
   jet, _ := models.FindJet(ctx, db, 1)
   pilot, _ := models.FindPilot(ctx, db, 1)
 
-  // Set the pilot to an existing pilot
+  // Set the pilot to an existing jet
   err := jet.SetPilot(ctx, db, false, &pilot)
 
   pilot = models.Pilot{
@@ -1716,11 +1767,13 @@ p1.Name = "Hogan"
 err := p1.Upsert(ctx, db, true, []string{"id"}, boil.Whitelist("name"), boil.Whitelist("id", "name"))
 ```
 
-The `updateOnConflict` argument allows you to specify whether you would like Postgres
-to perform a `DO NOTHING` on conflict, opposed to a `DO UPDATE`. For MySQL, this param will not be generated.
-
-The `conflictColumns` argument allows you to specify the `ON CONFLICT` columns for Postgres.
-For MySQL, this param will not be generated.
+* **Postgres**
+  * The `updateOnConflict` argument allows you to specify whether you would like Postgres
+  to perform a `DO NOTHING` on conflict, opposed to a `DO UPDATE`. For MySQL and MSSQL, this param will not be generated.
+  * The `conflictColumns` argument allows you to specify the `ON CONFLICT` columns for Postgres.
+  For MySQL and MSSQL, this param will not be generated.
+* **MySQL and MSSQL**
+  * Passing `boil.None()` for `updateColumns` allows to perform a `DO NOTHING` on conflict similar to Postgres.
 
 Note: Passing a different set of column values to the update component is not currently supported.
 

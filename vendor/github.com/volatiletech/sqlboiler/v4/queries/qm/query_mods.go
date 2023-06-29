@@ -361,7 +361,7 @@ type whereNotInQueryMod struct {
 
 // Apply implements QueryMod.Apply.
 func (qm whereNotInQueryMod) Apply(q *queries.Query) {
-	queries.AppendIn(q, qm.clause, qm.args...)
+	queries.AppendNotIn(q, qm.clause, qm.args...)
 }
 
 // WhereNotIn allows you to specify a "x NOT IN (set)" clause for your where
@@ -381,7 +381,7 @@ type andNotInQueryMod struct {
 
 // Apply implements QueryMod.Apply.
 func (qm andNotInQueryMod) Apply(q *queries.Query) {
-	queries.AppendIn(q, qm.clause, qm.args...)
+	queries.AppendNotIn(q, qm.clause, qm.args...)
 }
 
 // AndNotIn allows you to specify a "x NOT IN (set)" clause separated by an
@@ -403,7 +403,7 @@ type orNotInQueryMod struct {
 
 // Apply implements QueryMod.Apply.
 func (qm orNotInQueryMod) Apply(q *queries.Query) {
-	queries.AppendIn(q, qm.clause, qm.args...)
+	queries.AppendNotIn(q, qm.clause, qm.args...)
 	queries.SetLastInAsOr(q)
 }
 
@@ -458,17 +458,19 @@ func GroupBy(clause string) QueryMod {
 
 type orderByQueryMod struct {
 	clause string
+	args   []interface{}
 }
 
 // Apply implements QueryMod.Apply.
 func (qm orderByQueryMod) Apply(q *queries.Query) {
-	queries.AppendOrderBy(q, qm.clause)
+	queries.AppendOrderBy(q, qm.clause, qm.args...)
 }
 
 // OrderBy allows you to specify a order by clause for your statement
-func OrderBy(clause string) QueryMod {
+func OrderBy(clause string, args ...interface{}) QueryMod {
 	return orderByQueryMod{
 		clause: clause,
+		args:   args,
 	}
 }
 
@@ -554,8 +556,36 @@ func For(clause string) QueryMod {
 	}
 }
 
+type commentQueryMod struct {
+	comment string
+}
+
+// Apply implements QueryMod.Apply.
+func (qm commentQueryMod) Apply(q *queries.Query) {
+	queries.SetComment(q, qm.comment)
+}
+
+// Comment inserts a custom comment at the begin of your query
+func Comment(comment string) QueryMod {
+	return commentQueryMod{
+		comment: comment,
+	}
+}
+
 // Rels is an alias for strings.Join to make it easier to use relationship name
 // constants in Load.
 func Rels(r ...string) string {
 	return strings.Join(r, ".")
+}
+
+// WithDeleted removes where clauses that sqlboiler soft-delete may have
+// placed in a query.
+func WithDeleted() QueryMod {
+	return removeDeletedQueryMod{}
+}
+
+type removeDeletedQueryMod struct{}
+
+func (removeDeletedQueryMod) Apply(q *queries.Query) {
+	queries.RemoveSoftDeleteWhere(q)
 }

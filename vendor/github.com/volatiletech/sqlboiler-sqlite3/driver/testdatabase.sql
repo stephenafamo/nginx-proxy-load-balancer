@@ -159,3 +159,8 @@ create table type_monsters (
 	text_null     text null,
 	text_nnull    text not null
 );
+
+-- all table defintions will not cause sqlite autoincrement primary key without rowid tables to be generated
+create table autoinctest (
+	id INTEGER PRIMARY KEY
+);

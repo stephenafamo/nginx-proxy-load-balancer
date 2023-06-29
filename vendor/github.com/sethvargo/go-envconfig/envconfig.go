@@ -14,55 +14,54 @@
 
 // Package envconfig populates struct fields based on environment variable
 // values (or anything that responds to "Lookup"). Structs declare their
-// environment dependencies using the `env` tag with the key being the name of
+// environment dependencies using the "env" tag with the key being the name of
 // the environment variable, case sensitive.
 //
-//     type MyStruct struct {
-//         A string `env:"A"` // resolves A to $A
-//         B string `env:"B,required"` // resolves B to $B, errors if $B is unset
-//         C string `env:"C,default=foo"` // resolves C to $C, defaults to "foo"
+//	type MyStruct struct {
+//	  A string `env:"A"` // resolves A to $A
+//	  B string `env:"B,required"` // resolves B to $B, errors if $B is unset
+//	  C string `env:"C,default=foo"` // resolves C to $C, defaults to "foo"
 //
-//         D string `env:"D,required,default=foo"` // error, cannot be required and default
-//         E string `env:""` // error, must specify key
-//     }
+//	  D string `env:"D,required,default=foo"` // error, cannot be required and default
+//	  E string `env:""` // error, must specify key
+//	}
 //
 // All built-in types are supported except Func and Chan. If you need to define
 // a custom decoder, implement Decoder:
 //
-//     type MyStruct struct {
-//         field string
-//     }
+//	type MyStruct struct {
+//	  field string
+//	}
 //
-//     func (v *MyStruct) EnvDecode(val string) error {
-//         v.field = fmt.Sprintf("PREFIX-%s", val)
-//         return nil
-//     }
+//	func (v *MyStruct) EnvDecode(val string) error {
+//	  v.field = fmt.Sprintf("PREFIX-%s", val)
+//	  return nil
+//	}
 //
 // In the environment, slices are specified as comma-separated values:
 //
-//     export MYVAR="a,b,c,d" // []string{"a", "b", "c", "d"}
+//	export MYVAR="a,b,c,d" // []string{"a", "b", "c", "d"}
 //
 // In the environment, maps are specified as comma-separated key:value pairs:
 //
-//     export MYVAR="a:b,c:d" // map[string]string{"a":"b", "c":"d"}
+//	export MYVAR="a:b,c:d" // map[string]string{"a":"b", "c":"d"}
 //
 // If you need to modify environment variable values before processing, you can
 // specify a custom mutator:
 //
-//     type Config struct {
-//         Password `env:"PASSWORD_SECRET"`
-//     }
+//	type Config struct {
+//	  Password `env:"PASSWORD_SECRET"`
+//	}
 //
-//     func resolveSecretFunc(ctx context.Context, key, value string) (string, error) {
-//         if strings.HasPrefix(key, "secret://") {
-//             return secretmanager.Resolve(ctx, value) // example
-//         }
-//         return value, nil
-//     }
+//	func resolveSecretFunc(ctx context.Context, key, value string) (string, error) {
+//	  if strings.HasPrefix(value, "secret://") {
+//	    return secretmanager.Resolve(ctx, value) // example
+//	  }
+//	  return value, nil
+//	}
 //
-//     var config Config
-//     ProcessWith(&config, OsLookuper(), resolveSecretFunc)
-//
+//	var config Config
+//	ProcessWith(&config, OsLookuper(), resolveSecretFunc)
 package envconfig
 
 import (
@@ -77,14 +76,22 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 const (
 	envTag = "env"
 
-	optRequired = "required"
-	optDefault  = "default="
-	optPrefix   = "prefix="
+	optDefault   = "default="
+	optDelimiter = "delimiter="
+	optNoInit    = "noinit"
+	optOverwrite = "overwrite"
+	optPrefix    = "prefix="
+	optRequired  = "required"
+	optSeparator = "separator="
+
+	defaultDelimiter = ","
+	defaultSeparator = ":"
 )
 
 // Error is a custom error type for errors returned by envconfig.
@@ -96,10 +103,12 @@ func (e Error) Error() string {
 }
 
 const (
+	ErrInvalidEnvvarName  = Error("invalid environment variable name")
 	ErrInvalidMapItem     = Error("invalid map item")
 	ErrLookuperNil        = Error("lookuper cannot be nil")
 	ErrMissingKey         = Error("missing key")
 	ErrMissingRequired    = Error("missing required value")
+	ErrNoInitNotPtr       = Error("field must be a pointer to have noinit")
 	ErrNotPtr             = Error("input must be a pointer")
 	ErrNotStruct          = Error("input must be a struct")
 	ErrPrefixNotStruct    = Error("prefix is only valid on struct types")
@@ -126,7 +135,7 @@ func (o *osLookuper) Lookup(key string) (string, bool) {
 	return os.LookupEnv(key)
 }
 
-// OsLookuper returns a lookuper that uses the environment (os.LookupEnv) to
+// OsLookuper returns a lookuper that uses the environment ([os.LookupEnv]) to
 // resolve values.
 func OsLookuper() Lookuper {
 	return new(osLookuper)
@@ -174,8 +183,8 @@ func PrefixLookuper(prefix string, l Lookuper) Lookuper {
 }
 
 type prefixLookuper struct {
-	prefix string
 	l      Lookuper
+	prefix string
 }
 
 func (p *prefixLookuper) Lookup(key string) (string, bool) {
@@ -191,12 +200,11 @@ func MultiLookuper(lookupers ...Lookuper) Lookuper {
 // Decoder is an interface that custom types/fields can implement to control how
 // decoding takes place. For example:
 //
-//     type MyType string
+//	type MyType string
 //
-//     func (mt MyType) EnvDecode(val string) error {
-//         return "CUSTOM-"+val
-//     }
-//
+//	func (mt MyType) EnvDecode(val string) error {
+//	    return "CUSTOM-"+val
+//	}
 type Decoder interface {
 	EnvDecode(val string) error
 }
@@ -208,12 +216,16 @@ type MutatorFunc func(ctx context.Context, k, v string) (string, error)
 
 // options are internal options for decoding.
 type options struct {
-	Default  string
-	Required bool
-	Prefix   string
+	Default   string
+	Delimiter string
+	Prefix    string
+	Separator string
+	NoInit    bool
+	Overwrite bool
+	Required  bool
 }
 
-// Process processes the struct using the environment. See ProcessWith for a
+// Process processes the struct using the environment. See [ProcessWith] for a
 // more customizable version.
 func Process(ctx context.Context, i interface{}) error {
 	return ProcessWith(ctx, i, OsLookuper())
@@ -222,6 +234,34 @@ func Process(ctx context.Context, i interface{}) error {
 // ProcessWith processes the given interface with the given lookuper. See the
 // package-level documentation for specific examples and behaviors.
 func ProcessWith(ctx context.Context, i interface{}, l Lookuper, fns ...MutatorFunc) error {
+	return processWith(ctx, i, l, false, fns...)
+}
+
+// ExtractDefaults is a helper that returns a fully-populated struct with the
+// default values resolved. This is helpful when you want to return a constant
+// "default" configuration that is not affected by the user's environment.
+//
+//	type Config struct {
+//	  Port string `env:"PORT,default=8080"`
+//	}
+//
+//	func DefaultConfig() *Config {
+//	  var cfg Config
+//	  if err := envconfig.ExtractDefaults(ctx, &cfg); err != nil {
+//	    panic("failed to extract default config: %s" + err.Error())
+//	  }
+//	  return &cfg
+//	}
+//
+// This is effectively the same as calling [ProcessWith] with an empty
+// [MapLookuper].
+func ExtractDefaults(ctx context.Context, i interface{}, fns ...MutatorFunc) error {
+	return processWith(ctx, i, MapLookuper(nil), false, fns...)
+}
+
+// processWith is a helper that captures whether the parent wanted
+// initialization.
+func processWith(ctx context.Context, i interface{}, l Lookuper, parentNoInit bool, fns ...MutatorFunc) error {
 	if l == nil {
 		return ErrLookuperNil
 	}
@@ -260,7 +300,33 @@ func ProcessWith(ctx context.Context, i interface{}, l Lookuper, fns ...MutatorF
 			return fmt.Errorf("%s: %w", tf.Name, err)
 		}
 
+		// NoInit is only permitted on pointers.
+		if opts.NoInit &&
+			ef.Kind() != reflect.Ptr &&
+			ef.Kind() != reflect.Slice &&
+			ef.Kind() != reflect.Map &&
+			ef.Kind() != reflect.UnsafePointer {
+			return fmt.Errorf("%s: %w", tf.Name, ErrNoInitNotPtr)
+		}
+		shouldNotInit := opts.NoInit || parentNoInit
+
+		isNilStructPtr := false
+		setNilStruct := func(v reflect.Value) {
+			origin := e.Field(i)
+			if isNilStructPtr {
+				empty := reflect.New(origin.Type().Elem()).Interface()
+
+				// If a struct (after traversal) equals to the empty value, it means
+				// nothing was changed in any sub-fields. With the noinit opt, we skip
+				// setting the empty value to the original struct pointer (keep it nil).
+				if !reflect.DeepEqual(v.Interface(), empty) || !shouldNotInit {
+					origin.Set(v)
+				}
+			}
+		}
+
 		// Initialize pointer structs.
+		pointerWasSet := false
 		for ef.Kind() == reflect.Ptr {
 			if ef.IsNil() {
 				if ef.Type().Elem().Kind() != reflect.Struct {
@@ -269,11 +335,13 @@ func ProcessWith(ctx context.Context, i interface{}, l Lookuper, fns ...MutatorF
 					break
 				}
 
-				// Nil pointer to a struct, create so we can traverse.
-				ef.Set(reflect.New(ef.Type().Elem()))
+				isNilStructPtr = true
+				// Use an empty struct of the type so we can traverse.
+				ef = reflect.New(ef.Type().Elem()).Elem()
+			} else {
+				pointerWasSet = true
+				ef = ef.Elem()
 			}
-
-			ef = ef.Elem()
 		}
 
 		// Special case handle structs. This has to come after the value resolution in
@@ -286,7 +354,7 @@ func ProcessWith(ctx context.Context, i interface{}, l Lookuper, fns ...MutatorF
 			// Lookup the value, ignoring an error if the key isn't defined. This is
 			// required for nested structs that don't declare their own `env` keys,
 			// but have internal fields with an `env` defined.
-			val, err := lookup(key, opts, l)
+			val, _, _, err := lookup(key, opts, l)
 			if err != nil && !errors.Is(err, ErrMissingKey) {
 				return fmt.Errorf("%s: %w", tf.Name, err)
 			}
@@ -295,6 +363,8 @@ func ProcessWith(ctx context.Context, i interface{}, l Lookuper, fns ...MutatorF
 				if err != nil {
 					return err
 				}
+
+				setNilStruct(ef)
 				continue
 			}
 
@@ -303,10 +373,11 @@ func ProcessWith(ctx context.Context, i interface{}, l Lookuper, fns ...MutatorF
 				plu = PrefixLookuper(opts.Prefix, l)
 			}
 
-			if err := ProcessWith(ctx, ef.Interface(), plu, fns...); err != nil {
+			if err := processWith(ctx, ef.Interface(), plu, shouldNotInit, fns...); err != nil {
 				return fmt.Errorf("%s: %w", tf.Name, err)
 			}
 
+			setNilStruct(ef)
 			continue
 		}
 
@@ -321,29 +392,50 @@ func ProcessWith(ctx context.Context, i interface{}, l Lookuper, fns ...MutatorF
 			continue
 		}
 
-		// The field already has a non-zero value, do not overwrite.
-		if !ef.IsZero() {
+		// The field already has a non-zero value and overwrite is false, do not
+		// overwrite.
+		if (pointerWasSet || !ef.IsZero()) && !opts.Overwrite {
 			continue
 		}
 
-		val, err := lookup(key, opts, l)
+		val, found, usedDefault, err := lookup(key, opts, l)
 		if err != nil {
 			return fmt.Errorf("%s: %w", tf.Name, err)
 		}
 
+		// If the field already has a non-zero value and there was no value directly
+		// specified, do not overwrite the existing field. We only want to overwrite
+		// when the envvar was provided directly.
+		if (pointerWasSet || !ef.IsZero()) && !found {
+			continue
+		}
+
 		// Apply any mutators. Mutators are applied after the lookup, but before any
-		// type conversions. They always resolve to a string (or error)
-		for _, fn := range fns {
-			if fn != nil {
-				val, err = fn(ctx, key, val)
-				if err != nil {
-					return fmt.Errorf("%s: %w", tf.Name, err)
+		// type conversions. They always resolve to a string (or error), so we don't
+		// call mutators when the environment variable was not set.
+		if found || usedDefault {
+			for _, fn := range fns {
+				if fn != nil {
+					val, err = fn(ctx, key, val)
+					if err != nil {
+						return fmt.Errorf("%s: %w", tf.Name, err)
+					}
 				}
 			}
 		}
 
+		// If Delimiter is not defined set it to ","
+		if opts.Delimiter == "" {
+			opts.Delimiter = defaultDelimiter
+		}
+
+		// If Separator is not defined set it to ":"
+		if opts.Separator == "" {
+			opts.Separator = defaultSeparator
+		}
+
 		// Set value.
-		if err := processField(val, ef); err != nil {
+		if err := processField(val, ef, opts.Delimiter, opts.Separator, opts.NoInit); err != nil {
 			return fmt.Errorf("%s(%q): %w", tf.Name, val, err)
 		}
 	}
@@ -357,16 +449,28 @@ func keyAndOpts(tag string) (string, *options, error) {
 	parts := strings.Split(tag, ",")
 	key, tagOpts := strings.TrimSpace(parts[0]), parts[1:]
 
+	if key != "" && !validateEnvName(key) {
+		return "", nil, fmt.Errorf("%q: %w ", key, ErrInvalidEnvvarName)
+	}
+
 	var opts options
 
 LOOP:
 	for i, o := range tagOpts {
-		o = strings.TrimSpace(o)
+		o = strings.TrimLeftFunc(o, unicode.IsSpace)
 		switch {
+		case o == optOverwrite:
+			opts.Overwrite = true
 		case o == optRequired:
 			opts.Required = true
+		case o == optNoInit:
+			opts.NoInit = true
 		case strings.HasPrefix(o, optPrefix):
 			opts.Prefix = strings.TrimPrefix(o, optPrefix)
+		case strings.HasPrefix(o, optDelimiter):
+			opts.Delimiter = strings.TrimPrefix(o, optDelimiter)
+		case strings.HasPrefix(o, optSeparator):
+			opts.Separator = strings.TrimPrefix(o, optSeparator)
 		case strings.HasPrefix(o, optDefault):
 			// If a default value was given, assume everything after is the provided
 			// value, including comma-seprated items.
@@ -381,43 +485,50 @@ LOOP:
 	return key, &opts, nil
 }
 
-// lookup looks up the given key using the provided Lookuper and options.
-func lookup(key string, opts *options, l Lookuper) (string, error) {
+// lookup looks up the given key using the provided Lookuper and options. The
+// first boolean parameter indicates whether the value was found in the
+// lookuper. The second boolean parameter indicates whether the default value
+// was used.
+func lookup(key string, opts *options, l Lookuper) (string, bool, bool, error) {
 	if key == "" {
 		// The struct has something like `env:",required"`, which is likely a
 		// mistake. We could try to infer the envvar from the field name, but that
 		// feels too magical.
-		return "", ErrMissingKey
+		return "", false, false, ErrMissingKey
 	}
 
 	if opts.Required && opts.Default != "" {
 		// Having a default value on a required value doesn't make sense.
-		return "", ErrRequiredAndDefault
+		return "", false, false, ErrRequiredAndDefault
 	}
 
 	// Lookup value.
-	val, ok := l.Lookup(key)
-	if !ok {
+	val, found := l.Lookup(key)
+	if !found {
 		if opts.Required {
-			return "", fmt.Errorf("%w: %s", ErrMissingRequired, key)
+			if pl, ok := l.(*prefixLookuper); ok {
+				key = pl.prefix + key
+			}
+
+			return "", false, false, fmt.Errorf("%w: %s", ErrMissingRequired, key)
 		}
 
 		if opts.Default != "" {
-			val = opts.Default
+			// Expand the default value. This allows for a default value that maps to
+			// a different variable.
+			val = os.Expand(opts.Default, func(i string) string {
+				s, ok := l.Lookup(i)
+				if ok {
+					return s
+				}
+				return ""
+			})
+
+			return val, false, true, nil
 		}
 	}
 
-	// Expand value. This allows for a value or default value that maps to a
-	// different variable.
-	val = os.Expand(val, func(i string) string {
-		s, ok := l.Lookup(i)
-		if ok {
-			return s
-		}
-		return ""
-	})
-
-	return val, nil
+	return val, found, false, nil
 }
 
 // processAsDecoder processes the given value as a decoder or custom
@@ -437,38 +548,41 @@ func processAsDecoder(v string, ef reflect.Value) (bool, error) {
 	if ef.CanInterface() {
 		iface := ef.Interface()
 
+		// If a developer chooses to implement the Decoder interface on a type,
+		// never attempt to use other decoders in case of failure. EnvDecode's
+		// decoding logic is "the right one", and the error returned (if any)
+		// is the most specific we can get.
 		if dec, ok := iface.(Decoder); ok {
 			imp = true
-			if err = dec.EnvDecode(v); err == nil {
-				return true, nil
-			}
+			err = dec.EnvDecode(v)
+			return imp, err
 		}
 
-		if tu, ok := iface.(encoding.BinaryUnmarshaler); ok {
+		if tu, ok := iface.(encoding.TextUnmarshaler); ok {
 			imp = true
-			if err = tu.UnmarshalBinary([]byte(v)); err == nil {
-				return true, nil
-			}
-		}
-
-		if tu, ok := iface.(gob.GobDecoder); ok {
-			imp = true
-			if err = tu.GobDecode([]byte(v)); err == nil {
-				return true, nil
+			if err = tu.UnmarshalText([]byte(v)); err == nil {
+				return imp, nil
 			}
 		}
 
 		if tu, ok := iface.(json.Unmarshaler); ok {
 			imp = true
 			if err = tu.UnmarshalJSON([]byte(v)); err == nil {
-				return true, nil
+				return imp, nil
 			}
 		}
 
-		if tu, ok := iface.(encoding.TextUnmarshaler); ok {
+		if tu, ok := iface.(encoding.BinaryUnmarshaler); ok {
 			imp = true
-			if err = tu.UnmarshalText([]byte(v)); err == nil {
-				return true, nil
+			if err = tu.UnmarshalBinary([]byte(v)); err == nil {
+				return imp, nil
+			}
+		}
+
+		if tu, ok := iface.(gob.GobDecoder); ok {
+			imp = true
+			if err = tu.GobDecode([]byte(v)); err == nil {
+				return imp, nil
 			}
 		}
 	}
@@ -476,7 +590,12 @@ func processAsDecoder(v string, ef reflect.Value) (bool, error) {
 	return imp, err
 }
 
-func processField(v string, ef reflect.Value) error {
+func processField(v string, ef reflect.Value, delimiter, separator string, noInit bool) error {
+	// If the input value is empty and initialization is skipped, do nothing.
+	if v == "" && noInit {
+		return nil
+	}
+
 	// Handle pointers and uninitialized pointers.
 	for ef.Type().Kind() == reflect.Ptr {
 		if ef.IsNil() {
@@ -549,22 +668,22 @@ func processField(v string, ef reflect.Value) error {
 
 	// Maps
 	case reflect.Map:
-		vals := strings.Split(v, ",")
+		vals := strings.Split(v, delimiter)
 		mp := reflect.MakeMapWithSize(tf, len(vals))
 		for _, val := range vals {
-			pair := strings.SplitN(val, ":", 2)
+			pair := strings.SplitN(val, separator, 2)
 			if len(pair) < 2 {
 				return fmt.Errorf("%s: %w", val, ErrInvalidMapItem)
 			}
 			mKey, mVal := strings.TrimSpace(pair[0]), strings.TrimSpace(pair[1])
 
 			k := reflect.New(tf.Key()).Elem()
-			if err := processField(mKey, k); err != nil {
+			if err := processField(mKey, k, delimiter, separator, noInit); err != nil {
 				return fmt.Errorf("%s: %w", mKey, err)
 			}
 
 			v := reflect.New(tf.Elem()).Elem()
-			if err := processField(mVal, v); err != nil {
+			if err := processField(mVal, v, delimiter, separator, noInit); err != nil {
 				return fmt.Errorf("%s: %w", mVal, err)
 			}
 
@@ -578,11 +697,11 @@ func processField(v string, ef reflect.Value) error {
 		if tf.Elem().Kind() == reflect.Uint8 {
 			ef.Set(reflect.ValueOf([]byte(v)))
 		} else {
-			vals := strings.Split(v, ",")
+			vals := strings.Split(v, delimiter)
 			s := reflect.MakeSlice(tf, len(vals), len(vals))
 			for i, val := range vals {
 				val = strings.TrimSpace(val)
-				if err := processField(val, s.Index(i)); err != nil {
+				if err := processField(val, s.Index(i), delimiter, separator, noInit); err != nil {
 					return fmt.Errorf("%s: %w", val, err)
 				}
 			}
@@ -591,4 +710,35 @@ func processField(v string, ef reflect.Value) error {
 	}
 
 	return nil
+}
+
+// validateEnvName validates the given string conforms to being a valid
+// environment variable.
+//
+// Per IEEE Std 1003.1-2001 environment variables consist solely of uppercase
+// letters, digits, and _, and do not begin with a digit.
+func validateEnvName(s string) bool {
+	if s == "" {
+		return false
+	}
+
+	for i, r := range s {
+		if (i == 0 && !isLetter(r)) || (!isLetter(r) && !isNumber(r) && r != '_') {
+			return false
+		}
+	}
+
+	return true
+}
+
+// isLetter returns true if the given rune is a letter between a-z,A-Z. This is
+// different than unicode.IsLetter which includes all L character cases.
+func isLetter(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+// isNumber returns true if the given run is a number between 0-9. This is
+// different than unicode.IsNumber in that it only allows 0-9.
+func isNumber(r rune) bool {
+	return r >= '0' && r <= '9'
 }

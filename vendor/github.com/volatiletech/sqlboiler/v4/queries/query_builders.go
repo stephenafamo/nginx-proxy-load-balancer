@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	rgxIdentifier = regexp.MustCompile(`^(?i)"?[a-z_][_a-z0-9]*"?(?:\."?[_a-z][_a-z0-9]*"?)*$`)
-	rgxInClause   = regexp.MustCompile(`^(?i)(.*[\s|\)|\?])IN([\s|\(|\?].*)$`)
+	rgxIdentifier  = regexp.MustCompile(`^(?i)"?[a-z_][_a-z0-9]*"?(?:\."?[_a-z][_a-z0-9]*"?)*$`)
+	rgxInClause    = regexp.MustCompile(`^(?i)(.*[\s|\)|\?])IN([\s|\(|\?].*)$`)
+	rgxNotInClause = regexp.MustCompile(`^(?i)(.*[\s|\)|\?])NOT\s+IN([\s|\(|\?].*)$`)
 )
 
 // BuildQuery builds a query object into the query string
@@ -21,6 +22,8 @@ var (
 func BuildQuery(q *Query) (string, []interface{}) {
 	var buf *bytes.Buffer
 	var args []interface{}
+
+	q.removeSoftDeleteWhere()
 
 	switch {
 	case len(q.rawSQL.sql) != 0:
@@ -47,13 +50,14 @@ func buildSelectQuery(q *Query) (*bytes.Buffer, []interface{}) {
 	buf := strmangle.GetBuffer()
 	var args []interface{}
 
+	writeComment(q, buf)
 	writeCTEs(q, buf, &args)
 
 	buf.WriteString("SELECT ")
 
 	if q.dialect.UseTopClause {
-		if q.limit != 0 && q.offset == 0 {
-			fmt.Fprintf(buf, " TOP (%d) ", q.limit)
+		if q.limit != nil && q.offset == 0 {
+			fmt.Fprintf(buf, " TOP (%d) ", *q.limit)
 		}
 	}
 
@@ -137,6 +141,7 @@ func buildDeleteQuery(q *Query) (*bytes.Buffer, []interface{}) {
 	var args []interface{}
 	buf := strmangle.GetBuffer()
 
+	writeComment(q, buf)
 	writeCTEs(q, buf, &args)
 
 	buf.WriteString("DELETE FROM ")
@@ -159,6 +164,7 @@ func buildUpdateQuery(q *Query) (*bytes.Buffer, []interface{}) {
 	buf := strmangle.GetBuffer()
 	var args []interface{}
 
+	writeComment(q, buf)
 	writeCTEs(q, buf, &args)
 
 	buf.WriteString("UPDATE ")
@@ -236,8 +242,8 @@ func writeModifiers(q *Query, buf *bytes.Buffer, args *[]interface{}) {
 	}
 
 	if !q.dialect.UseTopClause {
-		if q.limit != 0 {
-			fmt.Fprintf(buf, " LIMIT %d", q.limit)
+		if q.limit != nil {
+			fmt.Fprintf(buf, " LIMIT %d", *q.limit)
 		}
 
 		if q.offset != 0 {
@@ -266,8 +272,8 @@ func writeModifiers(q *Query, buf *bytes.Buffer, args *[]interface{}) {
 			// https://docs.microsoft.com/en-us/sql/t-sql/queries/select-order-by-clause-transact-sql?view=sql-server-ver15
 			fmt.Fprintf(buf, " OFFSET %d ROWS", q.offset)
 
-			if q.limit != 0 {
-				fmt.Fprintf(buf, " FETCH NEXT %d ROWS ONLY", q.limit)
+			if q.limit != nil {
+				fmt.Fprintf(buf, " FETCH NEXT %d ROWS ONLY", *q.limit)
 			}
 		}
 	}
@@ -399,7 +405,14 @@ ManualParen:
 				}
 				break
 			}
-			matches := rgxInClause.FindStringSubmatch(where.clause)
+
+			var matches []string
+			if where.kind == whereKindIn {
+				matches = rgxInClause.FindStringSubmatch(where.clause)
+			} else {
+				matches = rgxNotInClause.FindStringSubmatch(where.clause)
+			}
+
 			// If we can't find any matches attempt a simple replace with 1 group.
 			// Clauses that fit this criteria will not be able to contain ? in their
 			// column name side, however if this case is being hit then the regexp
@@ -576,6 +589,19 @@ func parseFromClause(toks []string) (alias, name string, ok bool) {
 	}
 
 	return alias, name, ok
+}
+
+func writeComment(q *Query, buf *bytes.Buffer) {
+	if len(q.comment) == 0 {
+		return
+	}
+
+	lines := strings.Split(q.comment, "\n")
+	for _, line := range lines {
+		buf.WriteString("-- ")
+		buf.WriteString(line)
+		buf.WriteByte('\n')
+	}
 }
 
 func writeCTEs(q *Query, buf *bytes.Buffer, args *[]interface{}) {

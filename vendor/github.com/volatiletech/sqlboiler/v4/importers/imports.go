@@ -267,7 +267,6 @@ func NewDefaultImports() Collection {
 				`"bytes"`,
 				`"fmt"`,
 				`"io"`,
-				`"io/ioutil"`,
 				`"math/rand"`,
 				`"regexp"`,
 			},
@@ -278,6 +277,27 @@ func NewDefaultImports() Collection {
 		"boil_suites_test": {
 			Standard: List{
 				`"testing"`,
+			},
+		},
+	}
+
+	return col
+}
+
+// NullableEnumImports returns imports collection for nullable enum types.
+func NullableEnumImports() Collection {
+	var col Collection
+
+	col.Singleton = Map{
+		"boil_types": {
+			Standard: List{
+				`"bytes"`,
+				`"database/sql/driver"`,
+				`"encoding/json"`,
+			},
+			ThirdParty: List{
+				`"github.com/volatiletech/null/v8"`,
+				`"github.com/volatiletech/null/v8/convert"`,
 			},
 		},
 	}

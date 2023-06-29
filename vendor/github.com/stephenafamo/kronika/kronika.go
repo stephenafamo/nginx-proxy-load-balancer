@@ -24,13 +24,19 @@ func Every(ctx context.Context, start time.Time, interval time.Duration) <-chan 
 
 	// Run this in a goroutine, or our function will block until the first event
 	go func() {
-
 		// Run the first event after it gets to the start time
 		timer := time.NewTimer(time.Until(start))
 		defer timer.Stop() // Make sure to stop the timer when we're done
 
-		t := <-timer.C
-		stream <- t
+		// Listen on both the timer and the context done channel.
+		// Useful if the context is closed before the first timer
+		select {
+		case t := <-timer.C:
+			stream <- t
+		case <-ctx.Done():
+			close(stream)
+			return
+		}
 
 		// Open a new ticker
 		ticker := time.NewTicker(interval)

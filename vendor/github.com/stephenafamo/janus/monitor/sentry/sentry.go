@@ -52,7 +52,6 @@ func (s Sentry) Middleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	})
-
 }
 
 func (s Sentry) StartSpan(ctx context.Context, name string) (context.Context, monitor.Span) {
@@ -134,7 +133,7 @@ func (sli LoggingIntegration) print(event *sentry.Event) {
 	sli.Logger.Printf("\n%s", exception.Value)
 
 	// Print the user details
-	if event.User != (sentry.User{}) {
+	if !event.User.IsEmpty() {
 		sli.Logger.Printf("\nUser: Email %q, ID %q, IPAddress %q, Username %q",
 			event.User.Email, event.User.ID, event.User.IPAddress, event.User.Username)
 	}

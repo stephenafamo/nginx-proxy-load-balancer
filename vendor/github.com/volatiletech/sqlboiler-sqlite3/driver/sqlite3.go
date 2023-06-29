@@ -82,7 +82,7 @@ func (s SQLiteDriver) Assemble(config drivers.Config) (dbinfo *drivers.DBInfo, e
 
 			UseSchema:         false,
 			UseDefaultKeyword: true,
-			UseLastInsertID:   true,
+			UseLastInsertID:   false,
 		},
 	}
 
@@ -308,9 +308,15 @@ ColumnLoop:
 
 		// also get a correct information for Unique
 		for _, idx := range idxs {
+			// A unique index with multiple columns does not make
+			// the individual column unique
+			if len(idx.Columns) > 1 {
+				continue
+			}
 			for _, name := range idx.Columns {
 				if name == column.Name {
-					bColumn.Unique = idx.Unique > 0
+					// A column is unique if it has a unique non-partial index
+					bColumn.Unique = idx.Unique > 0 && idx.Partial == 0
 				}
 			}
 		}
@@ -424,6 +430,8 @@ func (SQLiteDriver) TranslateColumnType(c drivers.Column) drivers.Column {
 			c.Type = "null.Bool"
 		case "DATE", "DATETIME":
 			c.Type = "null.Time"
+		case "JSON":
+			c.Type = "null.JSON"
 
 		default:
 			c.Type = "null.String"
@@ -455,6 +463,8 @@ func (SQLiteDriver) TranslateColumnType(c drivers.Column) drivers.Column {
 			c.Type = "bool"
 		case "DATE", "DATETIME":
 			c.Type = "time.Time"
+		case "JSON":
+			c.Type = "types.JSON"
 
 		default:
 			c.Type = "string"
@@ -466,7 +476,31 @@ func (SQLiteDriver) TranslateColumnType(c drivers.Column) drivers.Column {
 
 // Imports returns important imports for the driver
 func (SQLiteDriver) Imports() (col importers.Collection, err error) {
+	col.All = importers.Set{
+		Standard: importers.List{
+			`"strconv"`,
+		},
+	}
+
+	col.Singleton = importers.Map{
+		"sqlite_upsert": {
+			Standard: importers.List{
+				`"fmt"`,
+				`"strings"`,
+			},
+			ThirdParty: importers.List{
+				`"github.com/volatiletech/strmangle"`,
+				`"github.com/volatiletech/sqlboiler/v4/drivers"`,
+			},
+		},
+	}
+
 	col.TestSingleton = importers.Map{
+		"sqlite3_suites_test": {
+			Standard: importers.List{
+				`"testing"`,
+			},
+		},
 		"sqlite3_main_test": {
 			Standard: importers.List{
 				`"database/sql"`,
@@ -544,6 +578,13 @@ func (SQLiteDriver) Imports() (col importers.Collection, err error) {
 		},
 		"types.NullDecimal": {
 			ThirdParty: importers.List{`"github.com/volatiletech/sqlboiler/v4/types"`},
+		},
+
+		"types.JSON": {
+			ThirdParty: importers.List{`"github.com/volatiletech/sqlboiler/v4/types"`},
+		},
+		"null.JSON": {
+			ThirdParty: importers.List{`"github.com/volatiletech/null/v8"`},
 		},
 	}
 	return col, err
