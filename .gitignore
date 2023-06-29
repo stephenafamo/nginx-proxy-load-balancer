@@ -7,6 +7,7 @@ goinstall.sh
 warden
 todo
 .env
+.envrc
 test
 .git
 bin

@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/bobesa/go-domain-util/domainutil"
 	"github.com/joho/godotenv"
 	"github.com/sethvargo/go-envconfig"
 	"github.com/stephenafamo/kronika"
-	"github.com/vultr/govultr"
+	"github.com/vultr/govultr/v3"
+	"golang.org/x/oauth2"
 )
 
 type Config struct {
@@ -24,10 +27,10 @@ type Config struct {
 }
 
 func main() {
-	var ctx = context.Background()
-	var err error
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
 
-	err = godotenv.Overload(".env")
+	err := godotenv.Overload(".env")
 	if err != nil {
 		// Ignore error if file is not present
 		if !errors.Is(err, os.ErrNotExist) {
@@ -35,14 +38,16 @@ func main() {
 		}
 	}
 
-	var config = Config{}
+	config := Config{}
 	if err := envconfig.Process(ctx, &config); err != nil {
 		panic(fmt.Errorf("error parsing config: %w", err))
 	}
 
 	log.Printf("Creating DNS record for %q", config.CERTBOT_DOMAIN)
 
-	vultrClient := govultr.NewClient(nil, config.VULTR_API_KEY)
+	oauth2Config := &oauth2.Config{}
+	ts := oauth2Config.TokenSource(ctx, &oauth2.Token{AccessToken: config.VULTR_API_KEY})
+	vultrClient := govultr.NewClient(oauth2.NewClient(ctx, ts))
 
 	rootDomain := domainutil.Domain(config.CERTBOT_DOMAIN)
 	recordName := "_acme-challenge"
@@ -50,19 +55,22 @@ func main() {
 		recordName += "." + domainutil.Subdomain(config.CERTBOT_DOMAIN)
 	}
 
-	err = vultrClient.DNSRecord.Create(
+	_, _, err = vultrClient.DomainRecord.Create(
 		ctx,
 		rootDomain,
-		"TXT",
-		recordName,
-		fmt.Sprintf("%q", config.CERTBOT_VALIDATION),
-		config.LETSENCRYPT_DNS_PROPAGATION, 0)
+		&govultr.DomainRecordReq{
+			Type: "TXT",
+			Name: recordName,
+			Data: fmt.Sprintf("%q", config.CERTBOT_VALIDATION),
+			TTL:  config.LETSENCRYPT_DNS_PROPAGATION,
+		},
+	)
 	if err != nil {
 		err = fmt.Errorf("could not create vultr DNS record: %w", err)
 		panic(err)
 	}
 
-	var wait = time.Second * time.Duration(config.LETSENCRYPT_DNS_PROPAGATION)
+	wait := time.Second * time.Duration(config.LETSENCRYPT_DNS_PROPAGATION)
 	log.Printf("Waiting for %f seconds", wait.Seconds())
 	kronika.WaitFor(ctx, wait)
 }

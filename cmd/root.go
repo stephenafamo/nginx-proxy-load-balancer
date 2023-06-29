@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -18,7 +19,7 @@ import (
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute(settings internal.Settings) {
+func Execute(ctx context.Context, settings internal.Settings) error {
 	// rootCmd represents the base command when called without any subcommands
 	rootCmd := &cobra.Command{
 		Use:   "warden",
@@ -94,5 +95,5 @@ func Execute(settings internal.Settings) {
 		},
 	}
 
-	rootCmd.Execute()
+	return rootCmd.ExecuteContext(ctx)
 }

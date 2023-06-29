@@ -30,7 +30,6 @@ func (n NginxServer) dev(ctx context.Context) error {
 }
 
 func (n NginxServer) prod(ctx context.Context) error {
-
 	cmd := exec.Command("nginx", "-g", "daemon off;")
 
 	go func() {
@@ -44,7 +43,7 @@ func (n NginxServer) prod(ctx context.Context) error {
 		err := cmd.Process.Signal(os.Interrupt)
 		if err != nil {
 			err = fmt.Errorf("error sending Interrupt signal to NGINX: %w", err)
-			n.Monitor.CaptureException(err)
+			n.Monitor.CaptureException(err, nil)
 		}
 	}()
 

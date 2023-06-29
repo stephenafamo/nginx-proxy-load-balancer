@@ -31,12 +31,11 @@ type DirectoryWatcher struct {
 }
 
 func (d DirectoryWatcher) Play(ctx context.Context) error {
-
 	for range kronika.Every(ctx, time.Now(), d.Settings.CONFIG_RELOAD_TIME) {
 		err := d.WalkConfigDirectory(context.Background()) // use new context
 		if err != nil {
 			err = fmt.Errorf("error walking config dir: %w", err)
-			d.Monitor.CaptureException(err)
+			d.Monitor.CaptureException(err, nil)
 		}
 	}
 
@@ -98,13 +97,13 @@ func (d DirectoryWatcher) checkFile(ctx context.Context, file FilePathAndInfo, w
 		err = d.addFile(ctx, file)
 		if err != nil {
 			err = fmt.Errorf("error adding file to DB: %w", err)
-			d.Monitor.CaptureException(err)
+			d.Monitor.CaptureException(err, nil)
 		}
 		return
 	}
 	if err != nil {
 		err = fmt.Errorf("error getting file from DB: %w", err)
-		d.Monitor.CaptureException(err)
+		d.Monitor.CaptureException(err, nil)
 		return
 	}
 
@@ -112,20 +111,19 @@ func (d DirectoryWatcher) checkFile(ctx context.Context, file FilePathAndInfo, w
 		err = d.updateFile(ctx, oldFile, file)
 		if err != nil {
 			err = fmt.Errorf("error updating file in DB: %w", err)
-			d.Monitor.CaptureException(err)
+			d.Monitor.CaptureException(err, nil)
 			return
 		}
 	}
 }
 
 func (d DirectoryWatcher) addFile(ctx context.Context, file FilePathAndInfo) error {
-
 	content, err := getFileContent(file.Path)
 	if err != nil {
 		return fmt.Errorf("error adding file: %w", err)
 	}
 
-	var fModel = models.File{
+	fModel := models.File{
 		Name:         strings.TrimSuffix(file.Name(), filepath.Ext(file.Name())),
 		Path:         file.Path,
 		Content:      content,
@@ -143,7 +141,6 @@ func (d DirectoryWatcher) addFile(ctx context.Context, file FilePathAndInfo) err
 }
 
 func (d DirectoryWatcher) updateFile(ctx context.Context, oldFile *models.File, file FilePathAndInfo) error {
-
 	content, err := getFileContent(file.Path)
 	if err != nil {
 		return fmt.Errorf("error updating file: %w", err)

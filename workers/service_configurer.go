@@ -23,12 +23,11 @@ type ServiceConfigurer struct {
 }
 
 func (s ServiceConfigurer) Play(ctx context.Context) error {
-
 	for range kronika.Every(ctx, time.Now(), s.Settings.CONFIG_RELOAD_TIME) {
 		err := s.setFileServices(context.Background()) // use new context
 		if err != nil {
 			err = fmt.Errorf("error configuring services: %w", err)
-			s.Monitor.CaptureException(err)
+			s.Monitor.CaptureException(err, nil)
 		}
 	}
 
@@ -86,7 +85,7 @@ func (s ServiceConfigurer) setFileServices(ctx context.Context) error {
 func (s ServiceConfigurer) createFileServices(ctx context.Context, file *models.File, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	var services = models.ServiceSlice{}
+	services := models.ServiceSlice{}
 
 	for key, config := range file.Content {
 
@@ -104,7 +103,7 @@ func (s ServiceConfigurer) createFileServices(ctx context.Context, file *models.
 	// Just add a new relationship. setFileServices cleans the old ones
 	if err := file.AddServices(ctx, s.DB, true, services...); err != nil {
 		err = fmt.Errorf("could not add file services: %w", err)
-		s.Monitor.CaptureException(err)
+		s.Monitor.CaptureException(err, nil)
 		return
 	}
 
@@ -114,7 +113,7 @@ func (s ServiceConfigurer) createFileServices(ctx context.Context, file *models.
 	file.IsConfigured = true
 	if _, err := file.Update(ctx, s.DB, boil.Infer()); err != nil {
 		err = fmt.Errorf("could not update file: %w", err)
-		s.Monitor.CaptureException(err)
+		s.Monitor.CaptureException(err, nil)
 		return
 	}
 

@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/joho/godotenv"
 	"github.com/sethvargo/go-envconfig"
@@ -17,6 +19,9 @@ import (
 )
 
 func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
 	// Load env variables from a .env file if present
 	err := godotenv.Overload(".env")
 	if err != nil {
@@ -26,13 +31,13 @@ func main() {
 		}
 	}
 
-	var settings = internal.Settings{}
-
-	ctx := context.Background()
+	settings := internal.Settings{}
 
 	if err := envconfig.Process(ctx, &settings); err != nil {
 		panic(fmt.Errorf("error parsing config: %w", err))
 	}
 
-	cmd.Execute(settings)
+	if err := cmd.Execute(ctx, settings); err != nil {
+		panic(err)
+	}
 }

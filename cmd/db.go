@@ -4,13 +4,6 @@ import (
 	"database/sql"
 )
 
-const (
-	stateNotConfigured    = "not configured"
-	stateToConfigureHttps = "to configure https"
-	stateToDisableHttp    = "to disable http"
-	stateConfigured       = "configured"
-)
-
 func createTables(db *sql.DB) error {
 	tx, err := db.Begin()
 	if err != nil {

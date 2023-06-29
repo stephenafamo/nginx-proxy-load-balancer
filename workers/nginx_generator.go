@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -38,12 +37,11 @@ type NginxGenerator struct {
 }
 
 func (n NginxGenerator) Play(ctx context.Context) error {
-
 	for range kronika.Every(ctx, time.Now(), n.Settings.CONFIG_RELOAD_TIME) {
 		err := n.GenerateNginxConfig(context.Background()) // use new context
 		if err != nil {
 			err = fmt.Errorf("error generating nginx configs: %w", err)
-			n.Monitor.CaptureException(err)
+			n.Monitor.CaptureException(err, nil)
 		}
 	}
 
@@ -51,7 +49,6 @@ func (n NginxGenerator) Play(ctx context.Context) error {
 }
 
 func (n NginxGenerator) GenerateNginxConfig(ctx context.Context) error {
-
 	err := n.deleteStaleConfigs(ctx)
 	if err != nil {
 		return fmt.Errorf("could not clean up stale configs: %w", err)
@@ -76,7 +73,6 @@ func (n NginxGenerator) GenerateNginxConfig(ctx context.Context) error {
 }
 
 func (n NginxGenerator) deleteStaleConfigs(ctx context.Context) error {
-
 	nginxFiles, err := models.NginxConfigs(
 		models.NginxConfigWhere.ServiceID.IsNull(),
 	).All(ctx, n.DB)
@@ -135,7 +131,6 @@ func (n NginxGenerator) generateBaseConfigs(ctx context.Context) error {
 }
 
 func (n NginxGenerator) generateHttpsConfigs(ctx context.Context) error {
-
 	services, err := models.Services(
 		models.ServiceWhere.State.EQ(internal.StateToConfigureHttps),
 		qm.Or2(
@@ -207,13 +202,13 @@ func (n NginxGenerator) generateBaseConfig(ctx context.Context, s *models.Servic
 	config, err := n.getFullConfig(s)
 	if err != nil {
 		err = fmt.Errorf("could not get full config: %w", err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 
 	configDirectory := ""
 	fileType := ""
-	configContents := []byte{}
+	var configContents []byte
 
 	switch strings.ToLower(config.Type) {
 	case "tcp", "udp", "stream":
@@ -222,7 +217,7 @@ func (n NginxGenerator) generateBaseConfig(ctx context.Context, s *models.Servic
 		err = n.Templates.ExecuteTemplate(&b, "streams", config)
 		if err != nil {
 			err = fmt.Errorf("error generating stream base config for %q in %q: %w", s.Name, s.R.File.Path, err)
-			n.Monitor.CaptureException(err)
+			n.Monitor.CaptureException(err, nil)
 			return
 		}
 		configContents = b.Bytes()
@@ -232,13 +227,13 @@ func (n NginxGenerator) generateBaseConfig(ctx context.Context, s *models.Servic
 		err = n.Templates.ExecuteTemplate(&b, "httpBase", config)
 		if err != nil {
 			err = fmt.Errorf("error generating http base config for %q in %q: %w", s.Name, s.R.File.Path, err)
-			n.Monitor.CaptureException(err)
+			n.Monitor.CaptureException(err, nil)
 			return
 		}
 		configContents = b.Bytes()
 	default:
 		err = fmt.Errorf("Unknown config type for %q in %q", s.Name, s.R.File.Path)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 
@@ -260,21 +255,20 @@ func (n NginxGenerator) generateBaseConfig(ctx context.Context, s *models.Servic
 	tx, err := n.DB.BeginTx(ctx, nil)
 	if err != nil {
 		err = fmt.Errorf("could not begin transaction: %w", err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 	defer func() {
-
 		if err == nil {
 			if commitErr := tx.Commit(); commitErr != nil {
-				n.Monitor.CaptureException(fmt.Errorf("could not commit transaction: %w", commitErr))
+				n.Monitor.CaptureException(fmt.Errorf("could not commit transaction: %w", commitErr), nil)
 				n.deleteFile(ngf.Path)
 				return
 			}
 			log.Printf("CONFIGURED BASE FOR: %s", s.Name)
 		} else {
 			if rollBkErr := tx.Rollback(); rollBkErr != nil {
-				n.Monitor.CaptureException(fmt.Errorf("could not rollback transaction: %w", rollBkErr))
+				n.Monitor.CaptureException(fmt.Errorf("could not rollback transaction: %w", rollBkErr), nil)
 				n.deleteFile(ngf.Path)
 				return
 			}
@@ -284,7 +278,7 @@ func (n NginxGenerator) generateBaseConfig(ctx context.Context, s *models.Servic
 	err = s.AddNginxConfigs(ctx, tx, true, ngf)
 	if err != nil {
 		err = fmt.Errorf("could not add nginx config to service in DB: %w", err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 
@@ -296,28 +290,27 @@ func (n NginxGenerator) generateBaseConfig(ctx context.Context, s *models.Servic
 	_, err = s.Update(ctx, tx, boil.Infer())
 	if err != nil {
 		err = fmt.Errorf("could not update service in DB: %w", err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 
 	// Add the nginx config file and rollback the transaction if there's an error
-	err = ioutil.WriteFile(ngf.Path, configContents, 0644)
+	err = os.WriteFile(ngf.Path, configContents, 0o644)
 	if err != nil {
 		err = fmt.Errorf("error writing nginx config file for %q to %q: %w", s.Name, ngf.Path, err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 }
 
 func (n NginxGenerator) generateHttpsConfig(ctx context.Context, s *models.Service) {
-
 	var err error
 	var b bytes.Buffer
 
 	config, err := n.getFullConfig(s)
 	if err != nil {
 		err = fmt.Errorf("could not get full config: %w", err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 
@@ -326,7 +319,7 @@ func (n NginxGenerator) generateHttpsConfig(ctx context.Context, s *models.Servi
 		if err != nil {
 			err = fmt.Errorf("could set SSL cert paths: %w", err)
 			n.sendServiceEvent(s, SSLCertGenerationFail)
-			n.Monitor.CaptureException(err)
+			n.Monitor.CaptureException(err, nil)
 			return
 		}
 	}
@@ -337,7 +330,7 @@ func (n NginxGenerator) generateHttpsConfig(ctx context.Context, s *models.Servi
 	err = n.Templates.ExecuteTemplate(&b, "https", config)
 	if err != nil {
 		err = fmt.Errorf("error generating https config for %q in %q: %w", s.Name, s.R.File.Path, err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 	configContents := b.Bytes()
@@ -346,7 +339,7 @@ func (n NginxGenerator) generateHttpsConfig(ctx context.Context, s *models.Servi
 	_, err = models.NginxConfigs(models.NginxConfigWhere.Path.EQ(configPath)).DeleteAll(ctx, n.DB)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		err = fmt.Errorf("could not delete old nginx http config at %q: %w", configPath, err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 
@@ -360,20 +353,20 @@ func (n NginxGenerator) generateHttpsConfig(ctx context.Context, s *models.Servi
 	tx, err := n.DB.BeginTx(ctx, nil)
 	if err != nil {
 		err = fmt.Errorf("could not begin transaction: %w", err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 	defer func() {
 		if err == nil {
 			if commitErr := tx.Commit(); commitErr != nil {
-				n.Monitor.CaptureException(fmt.Errorf("could not commit transaction: %w", commitErr))
+				n.Monitor.CaptureException(fmt.Errorf("could not commit transaction: %w", commitErr), nil)
 				n.deleteFile(ngf.Path)
 				return
 			}
 			log.Printf("CONFIGURED HTTPS FOR: %s", s.Name)
 		} else {
 			if rollBkErr := tx.Rollback(); rollBkErr != nil {
-				n.Monitor.CaptureException(fmt.Errorf("could not rollback transaction: %w", rollBkErr))
+				n.Monitor.CaptureException(fmt.Errorf("could not rollback transaction: %w", rollBkErr), nil)
 				n.deleteFile(ngf.Path)
 				return
 			}
@@ -383,7 +376,7 @@ func (n NginxGenerator) generateHttpsConfig(ctx context.Context, s *models.Servi
 	err = s.AddNginxConfigs(ctx, tx, true, ngf)
 	if err != nil {
 		err = fmt.Errorf("could not add nginx config to service in DB: %w", err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 
@@ -403,14 +396,14 @@ func (n NginxGenerator) generateHttpsConfig(ctx context.Context, s *models.Servi
 	_, err = s.Update(ctx, tx, boil.Infer())
 	if err != nil {
 		err = fmt.Errorf("could not update service in DB: %w", err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 
-	err = ioutil.WriteFile(ngf.Path, configContents, 0644)
+	err = os.WriteFile(ngf.Path, configContents, 0o644)
 	if err != nil {
 		err = fmt.Errorf("error writing nginx config file for %q to %q: %w", s.Name, ngf.Path, err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 }
@@ -424,31 +417,31 @@ func (n NginxGenerator) generateNoHttpConfig(ctx context.Context, s *models.Serv
 	config, err := n.getFullConfig(s)
 	if err != nil {
 		err = fmt.Errorf("could not get full config: %w", err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 
 	ngf, err := s.NginxConfigs(models.NginxConfigWhere.Type.EQ("http")).One(ctx, n.DB)
 	if err != nil {
 		err = fmt.Errorf("could not get base http config for service %q: %w", s.Name, err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 
 	err = n.Templates.ExecuteTemplate(&b, "httptoHttps", config)
 	if err != nil {
 		err = fmt.Errorf("error generating https only config for %q in %q: %w", s.Name, s.R.File.Path, err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 	configContents := b.Bytes()
 
 	// We are not creating a transaction since we're only running one db query
 	// We will write the file first, and delete it if there's an error while updating the service
-	err = ioutil.WriteFile(ngf.Path, configContents, 0644)
+	err = os.WriteFile(ngf.Path, configContents, 0o644)
 	if err != nil {
 		err = fmt.Errorf("error writing nginx config file for %q to %q: %w", s.Name, ngf.Path, err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 
@@ -457,7 +450,7 @@ func (n NginxGenerator) generateNoHttpConfig(ctx context.Context, s *models.Serv
 	if err != nil {
 		n.deleteFile(ngf.Path)
 		err = fmt.Errorf("could not update service in DB: %w", err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 		return
 	}
 
@@ -498,7 +491,7 @@ func (n NginxGenerator) setSslCertificatePath(ctx context.Context, config *inter
 
 func (n NginxGenerator) getFullConfig(s *models.Service) (internal.Config, error) {
 	var config internal.Config
-	var service = s.Content
+	service := s.Content
 
 	if service.Type == "" {
 		service.Type = "http"
@@ -542,7 +535,7 @@ func (n NginxGenerator) deleteFile(path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
 		err = fmt.Errorf("could not cleanup nginx conf file after failed query: %w", err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 	}
 }
 
@@ -570,7 +563,7 @@ func (n NginxGenerator) sendServiceEvent(service *models.Service, event serviceE
 	err := toml.NewEncoder(&b).Encode(service.Content)
 	if err != nil {
 		err = fmt.Errorf("could not encode service config: %w", err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 	}
 
 	values := url.Values{}
@@ -583,6 +576,6 @@ func (n NginxGenerator) sendServiceEvent(service *models.Service, event serviceE
 	_, err = client.PostForm(service.Content.Webhook, values)
 	if err != nil {
 		err = fmt.Errorf("error sending event to webhook: %w", err)
-		n.Monitor.CaptureException(err)
+		n.Monitor.CaptureException(err, nil)
 	}
 }
