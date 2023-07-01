@@ -1,4 +1,4 @@
-FROM golang:1.20 AS builder
+FROM golang:1.19 AS builder
 
 WORKDIR /usr/app
 
@@ -12,7 +12,7 @@ RUN make build
 
 
 
-FROM nginx:1.25 AS nginx-base
+FROM nginx:1.23 AS nginx-base
 
 LABEL maintainer="Stephen Afam-Osemene <me@stephenafamo.com>"
 WORKDIR /usr/app
