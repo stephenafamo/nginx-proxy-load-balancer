@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -267,6 +268,18 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 	return eventID
 }
 
+// CaptureCheckIn calls the method of the same name on currently bound Client instance
+// passing it a top-level Scope.
+// Returns CheckInID if the check-in was captured successfully, or nil otherwise.
+func (hub *Hub) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
+	client, scope := hub.Client(), hub.Scope()
+	if client == nil {
+		return nil
+	}
+
+	return client.CaptureCheckIn(checkIn, monitorConfig, scope)
+}
+
 // AddBreadcrumb records a new breadcrumb.
 //
 // The total number of breadcrumbs that can be recorded are limited by the
@@ -280,17 +293,16 @@ func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 		return
 	}
 
-	options := client.Options()
-	max := options.MaxBreadcrumbs
+	max := client.options.MaxBreadcrumbs
 	if max < 0 {
 		return
 	}
 
-	if options.BeforeBreadcrumb != nil {
+	if client.options.BeforeBreadcrumb != nil {
 		if hint == nil {
 			hint = &BreadcrumbHint{}
 		}
-		if breadcrumb = options.BeforeBreadcrumb(breadcrumb, hint); breadcrumb == nil {
+		if breadcrumb = client.options.BeforeBreadcrumb(breadcrumb, hint); breadcrumb == nil {
 			Logger.Println("breadcrumb dropped due to BeforeBreadcrumb callback.")
 			return
 		}
@@ -352,6 +364,34 @@ func (hub *Hub) Flush(timeout time.Duration) bool {
 	}
 
 	return client.Flush(timeout)
+}
+
+// GetTraceparent returns the current Sentry traceparent string, to be used as a HTTP header value
+// or HTML meta tag value.
+// This function is context aware, as in it either returns the traceparent based
+// on the current span, or the scope's propagation context.
+func (hub *Hub) GetTraceparent() string {
+	scope := hub.Scope()
+
+	if scope.span != nil {
+		return scope.span.ToSentryTrace()
+	}
+
+	return fmt.Sprintf("%s-%s", scope.propagationContext.TraceID, scope.propagationContext.SpanID)
+}
+
+// GetBaggage returns the current Sentry baggage string, to be used as a HTTP header value
+// or HTML meta tag value.
+// This function is context aware, as in it either returns the baggage based
+// on the current span or the scope's propagation context.
+func (hub *Hub) GetBaggage() string {
+	scope := hub.Scope()
+
+	if scope.span != nil {
+		return scope.span.ToBaggage()
+	}
+
+	return scope.propagationContext.DynamicSamplingContext.String()
 }
 
 // HasHubOnContext checks whether Hub instance is bound to a given Context struct.

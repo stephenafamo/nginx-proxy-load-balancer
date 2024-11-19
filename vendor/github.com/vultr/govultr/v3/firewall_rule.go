@@ -24,10 +24,8 @@ type FireWallRuleServiceHandler struct {
 
 // FirewallRule represents a Vultr firewall rule
 type FirewallRule struct {
-	ID     int    `json:"id"`
-	Action string `json:"action"`
-	// Deprecated:  Type should no longer be used. Instead, use IPType.
-	Type       string `json:"type"`
+	ID         int    `json:"id"`
+	Action     string `json:"action"`
 	IPType     string `json:"ip_type"`
 	Protocol   string `json:"protocol"`
 	Port       string `json:"port"`
@@ -58,7 +56,7 @@ type firewallRuleBase struct {
 }
 
 // Create will create a rule in a firewall group.
-func (f *FireWallRuleServiceHandler) Create(ctx context.Context, fwGroupID string, fwRuleReq *FirewallRuleReq) (*FirewallRule, *http.Response, error) {
+func (f *FireWallRuleServiceHandler) Create(ctx context.Context, fwGroupID string, fwRuleReq *FirewallRuleReq) (*FirewallRule, *http.Response, error) { //nolint:lll
 	uri := fmt.Sprintf("/v2/firewalls/%s/rules", fwGroupID)
 
 	req, err := f.client.NewRequest(ctx, http.MethodPost, uri, fwRuleReq)
@@ -106,7 +104,7 @@ func (f *FireWallRuleServiceHandler) Delete(ctx context.Context, fwGroupID strin
 }
 
 // List will return both ipv4 an ipv6 firewall rules that are defined within a firewall group
-func (f *FireWallRuleServiceHandler) List(ctx context.Context, fwGroupID string, options *ListOptions) ([]FirewallRule, *Meta, *http.Response, error) {
+func (f *FireWallRuleServiceHandler) List(ctx context.Context, fwGroupID string, options *ListOptions) ([]FirewallRule, *Meta, *http.Response, error) { //nolint:lll,dupl
 	uri := fmt.Sprintf("/v2/firewalls/%s/rules", fwGroupID)
 
 	req, err := f.client.NewRequest(ctx, http.MethodGet, uri, nil)

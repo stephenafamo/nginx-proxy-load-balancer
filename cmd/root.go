@@ -89,6 +89,7 @@ func Execute(ctx context.Context, settings internal.Settings) error {
 			}
 
 			return orchestra.PlayUntilSignal(
+				cmd.Context(),
 				conductor,
 				os.Interrupt, syscall.SIGTERM,
 			)

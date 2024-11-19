@@ -9,8 +9,10 @@ import (
 type ctxKey string
 
 // CtxUserID is the context key for the scope
-var CtxScope ctxKey = "scope"
-var CtxRequest ctxKey = "request"
+var (
+	CtxScope   ctxKey = "scope"
+	CtxRequest ctxKey = "request"
+)
 
 type Monitor interface {
 	// Any implementation must set the scope to the request context in the middleware
@@ -23,7 +25,6 @@ type Monitor interface {
 }
 
 type Scope interface {
-	SetTransactionName(name string)
 	SetTag(key, value string)
 	SetUser(id, username, email string)
 }

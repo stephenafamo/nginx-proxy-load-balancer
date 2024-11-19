@@ -5,21 +5,12 @@ import (
 	"time"
 )
 
-// Deprecated: Use SDKVersion instead.
-const Version = SDKVersion
-
-// Version is the version of the SDK.
-const SDKVersion = "0.19.0"
-
-// The identifier of the SDK.
-const SDKIdentifier = "sentry.go"
+// The version of the SDK.
+const SDKVersion = "0.29.1"
 
 // apiVersion is the minimum version of the Sentry API compatible with the
 // sentry-go SDK.
 const apiVersion = "7"
-
-// userAgent is the User-Agent of outgoing HTTP requests.
-const userAgent = "sentry-go/" + SDKVersion
 
 // Init initializes the SDK with options. The returned error is non-nil if
 // options is invalid, for instance if a malformed DSN is provided.
@@ -54,6 +45,12 @@ func CaptureException(exception error) *EventID {
 	return hub.CaptureException(exception)
 }
 
+// CaptureCheckIn captures a (cron) monitor check-in.
+func CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
+	hub := CurrentHub()
+	return hub.CaptureCheckIn(checkIn, monitorConfig)
+}
+
 // CaptureEvent captures an event on the currently active client if any.
 //
 // The event must already be assembled. Typically code would instead use
@@ -75,18 +72,17 @@ func Recover() *EventID {
 
 // RecoverWithContext captures a panic and passes relevant context object.
 func RecoverWithContext(ctx context.Context) *EventID {
-	if err := recover(); err != nil {
-		var hub *Hub
-
-		if HasHubOnContext(ctx) {
-			hub = GetHubFromContext(ctx)
-		} else {
-			hub = CurrentHub()
-		}
-
-		return hub.RecoverWithContext(ctx, err)
+	err := recover()
+	if err == nil {
+		return nil
 	}
-	return nil
+
+	hub := GetHubFromContext(ctx)
+	if hub == nil {
+		hub = CurrentHub()
+	}
+
+	return hub.RecoverWithContext(ctx, err)
 }
 
 // WithScope is a shorthand for CurrentHub().WithScope.

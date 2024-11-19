@@ -66,9 +66,29 @@ func SetMerge(a []string, b []string) []string {
 	return merged
 }
 
+// SetIntersect will return all elements present in both a and b
+func SetIntersect(a []string, b []string) []string {
+	intersection := make([]string, 0)
+
+	for _, aVal := range a {
+		for _, bVal := range b {
+			if aVal == bVal {
+				intersection = append(intersection, aVal)
+				break
+			}
+		}
+	}
+
+	return intersection
+}
+
 // SortByKeys returns a new ordered slice based on the keys ordering
 func SortByKeys(keys []string, strs []string) []string {
-	c := make([]string, len(strs))
+	resultLen := len(strs)
+	if len(keys) < len(strs) {
+		resultLen = len(keys)
+	}
+	c := make([]string, resultLen)
 
 	index := 0
 Outer:

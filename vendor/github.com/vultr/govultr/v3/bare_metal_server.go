@@ -36,6 +36,14 @@ type BareMetalServerService interface {
 	MassReboot(ctx context.Context, serverList []string) error
 
 	GetUpgrades(ctx context.Context, serverID string) (*Upgrades, *http.Response, error)
+
+	ListVPCInfo(ctx context.Context, serverID string) ([]VPCInfo, *http.Response, error)
+	AttachVPC(ctx context.Context, serverID, vpcID string) error
+	DetachVPC(ctx context.Context, serverID, vpcID string) error
+
+	ListVPC2Info(ctx context.Context, serverID string) ([]VPC2Info, *http.Response, error)
+	AttachVPC2(ctx context.Context, serverID string, vpc2Req *AttachVPC2Req) error
+	DetachVPC2(ctx context.Context, serverID, vpcID string) error
 }
 
 // BareMetalServerServiceHandler handles interaction with the Bare Metal methods for the Vultr API
@@ -45,66 +53,72 @@ type BareMetalServerServiceHandler struct {
 
 // BareMetalServer represents a Bare Metal server on Vultr
 type BareMetalServer struct {
-	ID              string `json:"id"`
-	Os              string `json:"os"`
-	RAM             string `json:"ram"`
-	Disk            string `json:"disk"`
-	MainIP          string `json:"main_ip"`
-	CPUCount        int    `json:"cpu_count"`
-	Region          string `json:"region"`
-	DefaultPassword string `json:"default_password"`
-	DateCreated     string `json:"date_created"`
-	Status          string `json:"status"`
-	NetmaskV4       string `json:"netmask_v4"`
-	GatewayV4       string `json:"gateway_v4"`
-	Plan            string `json:"plan"`
-	V6Network       string `json:"v6_network"`
-	V6MainIP        string `json:"v6_main_ip"`
-	V6NetworkSize   int    `json:"v6_network_size"`
-	MacAddress      int    `json:"mac_address"`
-	Label           string `json:"label"`
-	// Deprecated: Tag should no longer be used. Instead, use Tags.
-	Tag      string   `json:"tag"`
-	OsID     int      `json:"os_id"`
-	AppID    int      `json:"app_id"`
-	ImageID  string   `json:"image_id"`
-	Features []string `json:"features"`
-	Tags     []string `json:"tags"`
+	ID              string   `json:"id"`
+	Os              string   `json:"os"`
+	RAM             string   `json:"ram"`
+	Disk            string   `json:"disk"`
+	MainIP          string   `json:"main_ip"`
+	CPUCount        int      `json:"cpu_count"`
+	Region          string   `json:"region"`
+	DefaultPassword string   `json:"default_password"`
+	DateCreated     string   `json:"date_created"`
+	Status          string   `json:"status"`
+	NetmaskV4       string   `json:"netmask_v4"`
+	GatewayV4       string   `json:"gateway_v4"`
+	Plan            string   `json:"plan"`
+	V6Network       string   `json:"v6_network"`
+	V6MainIP        string   `json:"v6_main_ip"`
+	V6NetworkSize   int      `json:"v6_network_size"`
+	MacAddress      int      `json:"mac_address"`
+	Label           string   `json:"label"`
+	OsID            int      `json:"os_id"`
+	AppID           int      `json:"app_id"`
+	ImageID         string   `json:"image_id"`
+	Features        []string `json:"features"`
+	Tags            []string `json:"tags"`
+	UserScheme      string   `json:"user_scheme"`
 }
 
 // BareMetalCreate represents the optional parameters that can be set when creating a Bare Metal server
 type BareMetalCreate struct {
-	Region          string   `json:"region,omitempty"`
-	Plan            string   `json:"plan,omitempty"`
-	OsID            int      `json:"os_id,omitempty"`
-	StartupScriptID string   `json:"script_id,omitempty"`
-	SnapshotID      string   `json:"snapshot_id,omitempty"`
-	EnableIPv6      *bool    `json:"enable_ipv6,omitempty"`
-	Label           string   `json:"label,omitempty"`
-	SSHKeyIDs       []string `json:"sshkey_id,omitempty"`
-	AppID           int      `json:"app_id,omitempty"`
-	ImageID         string   `json:"image_id,omitempty"`
-	UserData        string   `json:"user_data,omitempty"`
-	ActivationEmail *bool    `json:"activation_email,omitempty"`
-	Hostname        string   `json:"hostname,omitempty"`
-	// Deprecated: Tag should no longer be used. Instead, use Tags.
-	Tag           string   `json:"tag,omitempty"`
-	ReservedIPv4  string   `json:"reserved_ipv4,omitempty"`
-	PersistentPxe *bool    `json:"persistent_pxe,omitempty"`
-	Tags          []string `json:"tags"`
+	Region          string            `json:"region"`
+	Plan            string            `json:"plan"`
+	OsID            int               `json:"os_id,omitempty"`
+	StartupScriptID string            `json:"script_id,omitempty"`
+	SnapshotID      string            `json:"snapshot_id,omitempty"`
+	EnableIPv6      *bool             `json:"enable_ipv6,omitempty"`
+	Label           string            `json:"label,omitempty"`
+	SSHKeyIDs       []string          `json:"sshkey_id,omitempty"`
+	AppID           int               `json:"app_id,omitempty"`
+	ImageID         string            `json:"image_id,omitempty"`
+	UserData        string            `json:"user_data,omitempty"`
+	ActivationEmail *bool             `json:"activation_email,omitempty"`
+	Hostname        string            `json:"hostname,omitempty"`
+	MdiskMode       string            `json:"mdisk_mode,omitempty"`
+	ReservedIPv4    string            `json:"reserved_ipv4,omitempty"`
+	PersistentPxe   *bool             `json:"persistent_pxe,omitempty"`
+	Tags            []string          `json:"tags,omitempty"`
+	UserScheme      string            `json:"user_scheme,omitempty"`
+	AttachVPC2      []string          `json:"attach_vpc2,omitempty"`
+	DetachVPC2      []string          `json:"detach_vpc2,omitempty"`
+	EnableVPC2      *bool             `json:"enable_vpc2,omitempty"`
+	AppVariables    map[string]string `json:"app_variables,omitempty"`
 }
 
 // BareMetalUpdate represents the optional parameters that can be set when updating a Bare Metal server
 type BareMetalUpdate struct {
-	OsID       int    `json:"os_id,omitempty"`
-	EnableIPv6 *bool  `json:"enable_ipv6,omitempty"`
-	Label      string `json:"label,omitempty"`
-	AppID      int    `json:"app_id,omitempty"`
-	ImageID    string `json:"image_id,omitempty"`
-	UserData   string `json:"user_data,omitempty"`
-	// Deprecated: Tag should no longer be used. Instead, use Tags.
-	Tag  *string  `json:"tag,omitempty"`
-	Tags []string `json:"tags"`
+	OsID       int      `json:"os_id,omitempty"`
+	EnableIPv6 *bool    `json:"enable_ipv6,omitempty"`
+	Label      string   `json:"label,omitempty"`
+	AppID      int      `json:"app_id,omitempty"`
+	ImageID    string   `json:"image_id,omitempty"`
+	UserData   string   `json:"user_data,omitempty"`
+	MdiskMode  string   `json:"mdisk_mode,omitempty"`
+	Tags       []string `json:"tags,omitempty"`
+	UserScheme string   `json:"user_scheme,omitempty"`
+	AttachVPC2 []string `json:"attach_vpc2,omitempty"`
+	DetachVPC2 []string `json:"detach_vpc2,omitempty"`
+	EnableVPC2 *bool    `json:"enable_vpc2,omitempty"`
 }
 
 // BareMetalServerBandwidth represents bandwidth information for a Bare Metal server
@@ -122,7 +136,7 @@ type bareMetalBase struct {
 	BareMetal *BareMetalServer `json:"bare_metal"`
 }
 
-// BMBareMetalBase ...
+// BMBareMetalBase represents the base struct for a Bare Metal server
 type BMBareMetalBase struct {
 	BareMetalBandwidth map[string]BareMetalServerBandwidth `json:"bandwidth"`
 }
@@ -170,7 +184,7 @@ func (b *BareMetalServerServiceHandler) Get(ctx context.Context, serverID string
 }
 
 // Update a Bare Metal server
-func (b *BareMetalServerServiceHandler) Update(ctx context.Context, serverID string, bmReq *BareMetalUpdate) (*BareMetalServer, *http.Response, error) {
+func (b *BareMetalServerServiceHandler) Update(ctx context.Context, serverID string, bmReq *BareMetalUpdate) (*BareMetalServer, *http.Response, error) { //nolint:lll
 	uri := fmt.Sprintf("%s/%s", bmPath, serverID)
 	req, err := b.client.NewRequest(ctx, http.MethodPatch, uri, bmReq)
 	if err != nil {
@@ -198,7 +212,7 @@ func (b *BareMetalServerServiceHandler) Delete(ctx context.Context, serverID str
 }
 
 // List all Bare Metal instances in your account.
-func (b *BareMetalServerServiceHandler) List(ctx context.Context, options *ListOptions) ([]BareMetalServer, *Meta, *http.Response, error) {
+func (b *BareMetalServerServiceHandler) List(ctx context.Context, options *ListOptions) ([]BareMetalServer, *Meta, *http.Response, error) { //nolint:dupl,lll
 	req, err := b.client.NewRequest(ctx, http.MethodGet, bmPath, nil)
 	if err != nil {
 		return nil, nil, nil, err
@@ -273,7 +287,7 @@ func (b *BareMetalServerServiceHandler) GetVNCUrl(ctx context.Context, serverID 
 
 // ListIPv4s information of a Bare Metal server.
 // IP information is only available for Bare Metal servers in the "active" state.
-func (b *BareMetalServerServiceHandler) ListIPv4s(ctx context.Context, serverID string, options *ListOptions) ([]IPv4, *Meta, *http.Response, error) {
+func (b *BareMetalServerServiceHandler) ListIPv4s(ctx context.Context, serverID string, options *ListOptions) ([]IPv4, *Meta, *http.Response, error) { //nolint:lll,dupl
 	uri := fmt.Sprintf("%s/%s/ipv4", bmPath, serverID)
 	req, err := b.client.NewRequest(ctx, http.MethodGet, uri, nil)
 	if err != nil {
@@ -299,7 +313,7 @@ func (b *BareMetalServerServiceHandler) ListIPv4s(ctx context.Context, serverID 
 // ListIPv6s information of a Bare Metal server.
 // IP information is only available for Bare Metal servers in the "active" state.
 // If the Bare Metal server does not have IPv6 enabled, then an empty array is returned.
-func (b *BareMetalServerServiceHandler) ListIPv6s(ctx context.Context, serverID string, options *ListOptions) ([]IPv6, *Meta, *http.Response, error) {
+func (b *BareMetalServerServiceHandler) ListIPv6s(ctx context.Context, serverID string, options *ListOptions) ([]IPv6, *Meta, *http.Response, error) { //nolint:lll,dupl
 	uri := fmt.Sprintf("%s/%s/ipv6", bmPath, serverID)
 	req, err := b.client.NewRequest(ctx, http.MethodGet, uri, nil)
 	if err != nil {
@@ -433,4 +447,94 @@ func (b *BareMetalServerServiceHandler) GetUpgrades(ctx context.Context, serverI
 	}
 
 	return upgrades.Upgrades, resp, nil
+}
+
+// ListVPCInfo will list all currently attached VPC IP information for the
+// given bare metal server.
+func (b *BareMetalServerServiceHandler) ListVPCInfo(ctx context.Context, serverID string) ([]VPCInfo, *http.Response, error) {
+	uri := fmt.Sprintf("%s/%s/vpcs", bmPath, serverID)
+	req, err := b.client.NewRequest(ctx, http.MethodGet, uri, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	vpcs := new(vpcInfoBase)
+	resp, err := b.client.DoWithContext(ctx, req, vpcs)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return vpcs.VPCs, resp, nil
+}
+
+// AttachVPC serves to attach a VPC to a bare metal server.
+func (b *BareMetalServerServiceHandler) AttachVPC(ctx context.Context, serverID, vpcID string) error {
+	uri := fmt.Sprintf("%s/%s/vpcs/attach", bmPath, serverID)
+	body := RequestBody{"vpc_id": vpcID}
+
+	req, err := b.client.NewRequest(ctx, http.MethodPost, uri, body)
+	if err != nil {
+		return err
+	}
+
+	_, err = b.client.DoWithContext(ctx, req, nil)
+	return err
+}
+
+// DetachVPC will detach a VPC from a bare metal server.
+func (b *BareMetalServerServiceHandler) DetachVPC(ctx context.Context, serverID, vpcID string) error {
+	uri := fmt.Sprintf("%s/%s/vpc2/detach", bmPath, serverID)
+	body := RequestBody{"vpc_id": vpcID}
+
+	req, err := b.client.NewRequest(ctx, http.MethodPost, uri, body)
+	if err != nil {
+		return err
+	}
+
+	_, err = b.client.DoWithContext(ctx, req, nil)
+	return err
+}
+
+// ListVPC2Info currently attached to a Bare Metal server.
+func (b *BareMetalServerServiceHandler) ListVPC2Info(ctx context.Context, serverID string) ([]VPC2Info, *http.Response, error) {
+	uri := fmt.Sprintf("%s/%s/vpc2", bmPath, serverID)
+	req, err := b.client.NewRequest(ctx, http.MethodGet, uri, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	vpcs := new(vpc2InfoBase)
+	resp, err := b.client.DoWithContext(ctx, req, vpcs)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return vpcs.VPCs, resp, nil
+}
+
+// AttachVPC2 to a Bare Metal server.
+func (b *BareMetalServerServiceHandler) AttachVPC2(ctx context.Context, serverID string, vpc2Req *AttachVPC2Req) error {
+	uri := fmt.Sprintf("%s/%s/vpc2/attach", bmPath, serverID)
+
+	req, err := b.client.NewRequest(ctx, http.MethodPost, uri, vpc2Req)
+	if err != nil {
+		return err
+	}
+
+	_, err = b.client.DoWithContext(ctx, req, nil)
+	return err
+}
+
+// DetachVPC2 from a Bare Metal server.
+func (b *BareMetalServerServiceHandler) DetachVPC2(ctx context.Context, serverID, vpcID string) error {
+	uri := fmt.Sprintf("%s/%s/vpc2/detach", bmPath, serverID)
+	body := RequestBody{"vpc_id": vpcID}
+
+	req, err := b.client.NewRequest(ctx, http.MethodPost, uri, body)
+	if err != nil {
+		return err
+	}
+
+	_, err = b.client.DoWithContext(ctx, req, nil)
+	return err
 }

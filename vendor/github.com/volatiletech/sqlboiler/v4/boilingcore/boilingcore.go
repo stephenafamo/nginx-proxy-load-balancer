@@ -74,16 +74,25 @@ func New(config *Config) (*State, error) {
 		}
 	}()
 
-	if len(config.Version) > 0 {
+	if len(s.Config.Version) > 0 {
 		noEditDisclaimer = []byte(
-			fmt.Sprintf(noEditDisclaimerFmt, " "+config.Version+" "),
+			fmt.Sprintf(noEditDisclaimerFmt, " "+s.Config.Version+" "),
 		)
 	}
 
-	s.Driver = drivers.GetDriver(config.DriverName)
+	if err := s.verifyModVersion(); err != nil {
+		if s.Config.StrictVerifyModVersion {
+			fmt.Printf("Error: %s\n", err.Error())
+			os.Exit(1)
+		} else {
+			fmt.Printf("Warn: %s\n", err.Error())
+		}
+	}
+
+	s.Driver = drivers.GetDriver(s.Config.DriverName)
 	s.initInflections()
 
-	err := s.initDBInfo(config.DriverConfig)
+	err := s.initDBInfo()
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to initialize tables")
 	}
@@ -115,12 +124,12 @@ func New(config *Config) (*State, error) {
 		return nil, errors.Wrap(err, "unable to initialize the output folders")
 	}
 
-	err = s.initTags(config.Tags)
+	err = s.initTags()
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to initialize struct tags")
 	}
 
-	err = s.initAliases(&config.Aliases)
+	err = s.initAliases()
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to initialize aliases")
 	}
@@ -132,35 +141,39 @@ func New(config *Config) (*State, error) {
 // state given.
 func (s *State) Run() error {
 	data := &templateData{
-		Tables:            s.Tables,
-		Aliases:           s.Config.Aliases,
-		DriverName:        s.Config.DriverName,
-		PkgName:           s.Config.PkgName,
-		AddGlobal:         s.Config.AddGlobal,
-		AddPanic:          s.Config.AddPanic,
-		AddSoftDeletes:    s.Config.AddSoftDeletes,
-		AddEnumTypes:      s.Config.AddEnumTypes,
-		EnumNullPrefix:    s.Config.EnumNullPrefix,
-		NoContext:         s.Config.NoContext,
-		NoHooks:           s.Config.NoHooks,
-		NoAutoTimestamps:  s.Config.NoAutoTimestamps,
-		NoRowsAffected:    s.Config.NoRowsAffected,
-		NoDriverTemplates: s.Config.NoDriverTemplates,
-		NoBackReferencing: s.Config.NoBackReferencing,
-		AlwaysWrapErrors:  s.Config.AlwaysWrapErrors,
-		StructTagCasing:   s.Config.StructTagCasing,
-		TagIgnore:         make(map[string]struct{}),
-		Tags:              s.Config.Tags,
-		RelationTag:       s.Config.RelationTag,
-		Dialect:           s.Dialect,
-		Schema:            s.Schema,
-		LQ:                strmangle.QuoteCharacter(s.Dialect.LQ),
-		RQ:                strmangle.QuoteCharacter(s.Dialect.RQ),
-		OutputDirDepth:    s.Config.OutputDirDepth(),
+		Tables:                s.Tables,
+		Aliases:               s.Config.Aliases,
+		DriverName:            s.Config.DriverName,
+		PkgName:               s.Config.PkgName,
+		AddGlobal:             s.Config.AddGlobal,
+		AddPanic:              s.Config.AddPanic,
+		AddSoftDeletes:        s.Config.AddSoftDeletes,
+		AddEnumTypes:          s.Config.AddEnumTypes,
+		SkipReplacedEnumTypes: s.Config.SkipReplacedEnumTypes,
+		EnumNullPrefix:        s.Config.EnumNullPrefix,
+		NoContext:             s.Config.NoContext,
+		NoHooks:               s.Config.NoHooks,
+		NoAutoTimestamps:      s.Config.NoAutoTimestamps,
+		NoRowsAffected:        s.Config.NoRowsAffected,
+		NoDriverTemplates:     s.Config.NoDriverTemplates,
+		NoBackReferencing:     s.Config.NoBackReferencing,
+		AlwaysWrapErrors:      s.Config.AlwaysWrapErrors,
+		StructTagCasing:       s.Config.StructTagCasing,
+		StructTagCases:        s.Config.StructTagCases,
+		TagIgnore:             make(map[string]struct{}),
+		Tags:                  s.Config.Tags,
+		RelationTag:           s.Config.RelationTag,
+		Dialect:               s.Dialect,
+		Schema:                s.Schema,
+		LQ:                    strmangle.QuoteCharacter(s.Dialect.LQ),
+		RQ:                    strmangle.QuoteCharacter(s.Dialect.RQ),
+		OutputDirDepth:        s.Config.OutputDirDepth(),
 
 		DBTypes:     make(once),
 		StringFuncs: templateStringMappers,
 		AutoColumns: s.Config.AutoColumns,
+
+		DiscardedEnumTypes: s.Config.DiscardedEnumTypes,
 	}
 
 	for _, v := range s.Config.TagIgnore {
@@ -404,8 +417,8 @@ func findTemplates(root, base string) (map[string]templateLoader, error) {
 }
 
 // initDBInfo retrieves information about the database
-func (s *State) initDBInfo(config map[string]interface{}) error {
-	dbInfo, err := s.Driver.Assemble(config)
+func (s *State) initDBInfo() error {
+	dbInfo, err := s.Driver.Assemble(s.Config.DriverConfig)
 	if err != nil {
 		return errors.Wrap(err, "unable to fetch table data")
 	}
@@ -450,6 +463,17 @@ func (s *State) mergeEnumImports() {
 // processTypeReplacements checks the config for type replacements
 // and performs them.
 func (s *State) processTypeReplacements() error {
+	var mandatoryEnumTypes []string
+	if s.Config.SkipReplacedEnumTypes {
+		mandatoryEnumTypes = make([]string, 0, 1)
+		// Replace types can be replaced themselves, so we must not disallow them in this case.
+		for _, r := range s.Config.TypeReplaces {
+			if !strmangle.ContainsAny(mandatoryEnumTypes, r.Replace.Type) {
+				mandatoryEnumTypes = append(mandatoryEnumTypes, r.Replace.Type)
+			}
+		}
+	}
+
 	for _, r := range s.Config.TypeReplaces {
 
 		for i := range s.Tables {
@@ -462,6 +486,11 @@ func (s *State) processTypeReplacements() error {
 			for j := range t.Columns {
 				c := t.Columns[j]
 				if matchColumn(c, r.Match) {
+					if s.Config.SkipReplacedEnumTypes &&
+						!strmangle.ContainsAny(s.Config.DiscardedEnumTypes, c.Type) &&
+						!strmangle.ContainsAny(mandatoryEnumTypes, c.Type) {
+						s.Config.DiscardedEnumTypes = append(s.Config.DiscardedEnumTypes, c.Type)
+					}
 					t.Columns[j] = columnMerge(c, r.Replace)
 
 					if len(r.Imports.Standard) != 0 || len(r.Imports.ThirdParty) != 0 {
@@ -642,7 +671,7 @@ func (s *State) initInflections() {
 
 // initTags removes duplicate tags and validates the format
 // of all user tags are simple strings without quotes: [a-zA-Z_\.]+
-func (s *State) initTags(tags []string) error {
+func (s *State) initTags() error {
 	s.Config.Tags = strmangle.RemoveDuplicates(s.Config.Tags)
 	for _, v := range s.Config.Tags {
 		if !rgxValidTag.MatchString(v) {
@@ -653,8 +682,8 @@ func (s *State) initTags(tags []string) error {
 	return nil
 }
 
-func (s *State) initAliases(a *Aliases) error {
-	FillAliases(a, s.Tables)
+func (s *State) initAliases() error {
+	FillAliases(&s.Config.Aliases, s.Tables)
 	return nil
 }
 
@@ -692,4 +721,52 @@ func normalizeSlashes(path string) string {
 func denormalizeSlashes(path string) string {
 	path = strings.ReplaceAll(path, `\`, `/`)
 	return path
+}
+
+func (s *State) verifyModVersion() error {
+	dir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("could not get working directory: %v", err)
+	}
+	var path string
+	for dir != "/" && dir != "." {
+		resolvedPath := filepath.Join(dir, "go.mod")
+
+		_, err := os.Stat(resolvedPath)
+		if os.IsNotExist(err) {
+			dir = filepath.Dir(dir)
+		} else {
+			path = resolvedPath
+			break
+		}
+	}
+	if path == "" {
+		return fmt.Errorf(fmt.Sprintf("could not find go.mod in any parent directory"))
+	}
+
+	gomodbytes, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf(fmt.Sprintf("could not read go.mod: %v", err))
+	}
+
+	re, err := regexp.Compile(`github\.com\/volatiletech\/sqlboiler\/v4 v(\d*\.\d*\.\d*)`)
+	if err != nil {
+		return fmt.Errorf(fmt.Sprintf("failed to parse regexp: %v", err))
+	}
+
+	match := re.FindSubmatch(gomodbytes)
+	if len(match) == 0 {
+		return fmt.Errorf(fmt.Sprintf("could not find sqlboiler version in go.mod"))
+	}
+	if string(match[1]) != s.Config.Version {
+		return fmt.Errorf(
+			"\tsqlboiler version in go.mod (%s) does not match executable version (%s)."+
+				"\n\tYou can update it with:"+
+				"\n\tgo get github.com/volatiletech/sqlboiler/v4",
+			string(match[0]),
+			s.Config.Version,
+		)
+	}
+
+	return nil
 }

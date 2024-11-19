@@ -38,12 +38,12 @@ This will start a player with a context, and close the context once it receives 
 Example:
 
 ```go
-package main 
+package main
 
 import (
     "os"
     "syscall"
-    
+
     "github.com/stephenafamo/orchestra"
 )
 
@@ -66,6 +66,7 @@ package main
 import (
     "context"
     "os"
+    "time"
     "syscall"
 
     "github.com/stephenafamo/orchestra"
@@ -87,7 +88,7 @@ func myFunction(ctx context.Context) error {
 }
 ```
 
-### `ServerPlayer{*http.Server}`
+### `NewServerPlayer(*http.Server)`
 
 `ServerPlayer` is a type that embeds the `*http.Server` and extends it to satisfy the `Player` interface.
 
@@ -96,18 +97,28 @@ Since a very common long running process is the `*http.Server`, this makes it ea
 With the help of multiple helper functions, we can create a gracefully shutting down server that closes on `SIGINT` and `SIGTERM` by:
 
 ```go
-package main 
+package main
 
 import (
     "net/http"
     "os"
     "syscall"
-    
+
+	"github.com/cenkalti/backoff/v4"
     "github.com/stephenafamo/orchestra"
 )
 
 func main() {
-    s := orchestra.ServerPlayer{&http.Server{}}
+    s := orchestra.NewServerPlayer(
+        // Setting the *http.Server
+        &http.Server{Addr: ":8080"},
+        // Sets the timeout waiting for the server to stop.
+        orchestra.WithShutdownTimeout(time.Second * 5),
+        // With TLS makes the server use ListenAndServeTLS
+        orchestra.WithTLS(),
+        // With Backoff adds a backoff strategy to the server
+        orchestra.WithBackoff(backoff.NewExponentialBackOff()),
+    )
     err := orchestra.PlayUntilSignal(s, os.Interrupt, syscall.SIGTERM)
     if err != nil {
         panic(err)
@@ -138,7 +149,7 @@ func main() {
     // A player from a function
     a := orchestra.PlayerFunc(myFunction)
     // A player from a server
-    b := orchestra.ServerPlayer{&http.Server{}}
+    b := orchestra.NewServerPlayer(myServer)
 
     // A conductor to control them all
     conductor := &orchestra.Conductor{
@@ -195,11 +206,49 @@ if err != nil {
 }
 ```
 
+### Restarting Players
+
+A player can be configured to restart, possibly with exponential backoff by implementing the `PlayerWithBackoff` interface.
+
+For example:
+
+```go
+package main
+
+import "github.com/cenkalti/backoff/v4"
+
+type playerThatRestartsImmediately struct{}
+
+func (playerThatRestartsImmediately) Backoff() backoff.BackOff {
+	return &backoff.ZeroBackOff{}
+}
+
+
+type playerWithExponentialBakoff struct{}
+
+func (playerWithExponentialBakoff) Backoff() backoff.BackOff {
+	return backoff.NewExponentialBackOff()
+}
+```
+
 ## Customization
 
-The logger can be modified by assiging a logger to `orchestra.Logger`
+The logger can be modified by assigning a logger to `orchestra.Logger`
+
+```go
+type Logger interface {
+	Info(msg string, attrs ...slog.Attr)
+	Error(msg string, attrs ...slog.Attr)
+	WithGroup(name string) Logger
+}
+```
+
+If you have an existing `*slog.Logger`, you can create an `orchestra.Logger` by using the `orchestra.LoggerFromSlog` function.
+
+```go
+orchestraLogger := orchestra.LoggerFromSlog(slog.LevelInfo, slog.LevelError, slog.Default())
+```
 
 ## Contributing
 
 Looking forward to pull requests.
-

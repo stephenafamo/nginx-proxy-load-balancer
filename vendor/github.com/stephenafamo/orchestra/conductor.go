@@ -2,9 +2,13 @@ package orchestra
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/cenkalti/backoff/v4"
 )
 
 const defaultTimeout time.Duration = 9 * time.Second
@@ -33,6 +37,11 @@ func (c *Conductor) playWithLogger(ctx context.Context, logger Logger) error {
 		c.playing = map[string]struct{}{}
 	}
 
+	// Only use the provided logger if the conductor's logger is nil
+	if c.Logger != nil {
+		logger = c.Logger
+	}
+
 	var wg sync.WaitGroup
 	var lock sync.RWMutex
 
@@ -41,7 +50,7 @@ func (c *Conductor) playWithLogger(ctx context.Context, logger Logger) error {
 	defer cancel() // shutdown players no matter how it exits
 
 	// This will be called after the main context is cancelled
-	timedCtx, cancelTimed := context.WithCancel(context.Background())
+	timedCtx, cancelTimed := context.WithCancel(context.WithoutCancel(ctx))
 	defer cancelTimed() // release resources at the end regardless
 
 	if c.Timeout < 1 {
@@ -63,7 +72,7 @@ func (c *Conductor) playWithLogger(ctx context.Context, logger Logger) error {
 
 	wg.Add(len(c.Players))
 	for name, p := range c.Players {
-		go c.conductPlayer(ctxWthCancel, &wg, &lock, errs, name, p, logger)
+		go c.conductPlayer(ctxWthCancel, &wg, &lock, errs, name, p, logger.WithGroup(name))
 	}
 
 	// Wait for all the players to be done in another goroutine
@@ -76,10 +85,10 @@ func (c *Conductor) playWithLogger(ctx context.Context, logger Logger) error {
 	case err := <-errs:
 		return fmt.Errorf("error occured in a player: %w", err)
 	case <-timedCtx.Done():
-		logger.Log("msg", "conductor stopped after timeout")
+		logger.Info("conductor stopped after timeout")
 		return c.getTimeoutError(&lock)
 	case <-allDone:
-		logger.Log("msg", "conductor exited sucessfully")
+		logger.Info("conductor exited sucessfully")
 		return nil
 	}
 }
@@ -97,23 +106,29 @@ func (c *Conductor) conductPlayer(ctx context.Context, wg *sync.WaitGroup, lock 
 		c.playing[name] = struct{}{}
 		lock.Unlock()
 
-		l.Log("msg", "starting player", "name", name)
+		l.Info("starting player", slog.String("name", name))
 
-		var err error
-		if c, ok := p.(*Conductor); ok {
-			err = c.playWithLogger(ctx, subConductorLogger{
-				name: name,
-				l:    c.Logger,
-			})
-		} else {
-			err = p.Play(ctx)
+		var bkoff backoff.BackOff = &backoff.StopBackOff{}
+		if p, ok := p.(PlayerWithBackoff); ok {
+			bkoff = p.Backoff()
 		}
 
-		if err != nil {
-			DefaultLogger.Log("error in " + name)
+		bkoff = backoff.WithContext(bkoff, ctx)
+
+		err := backoff.RetryNotify(func() error {
+			if c, ok := p.(*Conductor); ok {
+				return c.playWithLogger(ctx, l)
+			}
+			return p.Play(ctx)
+		}, bkoff, func(err error, d time.Duration) {
+			l.Error("player failed", slog.String("name", name), slog.Any("err", err), slog.Duration("backoff", d))
+		})
+		if err != nil && !errors.Is(err, context.Canceled) {
+			l.Error("player error", slog.String("name", name), slog.Any("err", err))
 			errs <- InstrumentError{name, err}
 		}
-		l.Log("msg", "stopped player", "name", name)
+
+		l.Info("player stopped", slog.String("name", name))
 	}
 
 	lock.Lock()

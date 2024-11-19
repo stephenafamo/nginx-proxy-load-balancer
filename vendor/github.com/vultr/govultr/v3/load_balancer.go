@@ -14,16 +14,16 @@ const lbPath = "/v2/load-balancers"
 // Link : https://www.vultr.com/api/#tag/load-balancer
 type LoadBalancerService interface {
 	Create(ctx context.Context, createReq *LoadBalancerReq) (*LoadBalancer, *http.Response, error)
-	Get(ctx context.Context, ID string) (*LoadBalancer, *http.Response, error)
-	Update(ctx context.Context, ID string, updateReq *LoadBalancerReq) error
-	Delete(ctx context.Context, ID string) error
+	Get(ctx context.Context, lbID string) (*LoadBalancer, *http.Response, error)
+	Update(ctx context.Context, lbID string, updateReq *LoadBalancerReq) error
+	Delete(ctx context.Context, lbID string) error
 	List(ctx context.Context, options *ListOptions) ([]LoadBalancer, *Meta, *http.Response, error)
-	CreateForwardingRule(ctx context.Context, ID string, rule *ForwardingRule) (*ForwardingRule, *http.Response, error)
-	GetForwardingRule(ctx context.Context, ID string, ruleID string) (*ForwardingRule, *http.Response, error)
-	DeleteForwardingRule(ctx context.Context, ID string, RuleID string) error
-	ListForwardingRules(ctx context.Context, ID string, options *ListOptions) ([]ForwardingRule, *Meta, *http.Response, error)
-	ListFirewallRules(ctx context.Context, ID string, options *ListOptions) ([]LBFirewallRule, *Meta, *http.Response, error)
-	GetFirewallRule(ctx context.Context, ID string, ruleID string) (*LBFirewallRule, *http.Response, error)
+	CreateForwardingRule(ctx context.Context, lbID string, rule *ForwardingRule) (*ForwardingRule, *http.Response, error)
+	GetForwardingRule(ctx context.Context, lbID string, ruleID string) (*ForwardingRule, *http.Response, error)
+	DeleteForwardingRule(ctx context.Context, lbID string, RuleID string) error
+	ListForwardingRules(ctx context.Context, lbID string, options *ListOptions) ([]ForwardingRule, *Meta, *http.Response, error)
+	ListFirewallRules(ctx context.Context, lbID string, options *ListOptions) ([]LBFirewallRule, *Meta, *http.Response, error)
+	GetFirewallRule(ctx context.Context, lbID string, ruleID string) (*LBFirewallRule, *http.Response, error)
 }
 
 // LoadBalancerHandler handles interaction with the server methods for the Vultr API
@@ -41,9 +41,12 @@ type LoadBalancer struct {
 	IPV4            string           `json:"ipv4,omitempty"`
 	IPV6            string           `json:"ipv6,omitempty"`
 	Instances       []string         `json:"instances,omitempty"`
+	Nodes           int              `json:"nodes,omitempty"`
 	HealthCheck     *HealthCheck     `json:"health_check,omitempty"`
 	GenericInfo     *GenericInfo     `json:"generic_info,omitempty"`
 	SSLInfo         *bool            `json:"has_ssl,omitempty"`
+	HTTP2           *bool            `json:"http2,omitempty"`
+	HTTP3           *bool            `json:"http3,omitempty"`
 	ForwardingRules []ForwardingRule `json:"forwarding_rules,omitempty"`
 	FirewallRules   []LBFirewallRule `json:"firewall_rules,omitempty"`
 }
@@ -52,18 +55,20 @@ type LoadBalancer struct {
 type LoadBalancerReq struct {
 	Region             string           `json:"region,omitempty"`
 	Label              string           `json:"label,omitempty"`
-	Instances          []string         `json:"instances"`
+	Instances          []string         `json:"instances,omitempty"`
+	Nodes              int              `json:"nodes,omitempty"`
 	HealthCheck        *HealthCheck     `json:"health_check,omitempty"`
 	StickySessions     *StickySessions  `json:"sticky_session,omitempty"`
 	ForwardingRules    []ForwardingRule `json:"forwarding_rules,omitempty"`
 	SSL                *SSL             `json:"ssl,omitempty"`
 	SSLRedirect        *bool            `json:"ssl_redirect,omitempty"`
+	HTTP2              *bool            `json:"http2,omitempty"`
+	HTTP3              *bool            `json:"http3,omitempty"`
 	ProxyProtocol      *bool            `json:"proxy_protocol,omitempty"`
 	BalancingAlgorithm string           `json:"balancing_algorithm,omitempty"`
-	FirewallRules      []LBFirewallRule `json:"firewall_rules"`
-	// Deprecated:  PrivateNetwork should no longer be used. Instead, use VPC.
-	PrivateNetwork *string `json:"private_network,omitempty"`
-	VPC            *string `json:"vpc,omitempty"`
+	FirewallRules      []LBFirewallRule `json:"firewall_rules,omitempty"`
+	Timeout            int              `json:"timeout,omitempty"`
+	VPC                *string          `json:"vpc,omitempty"`
 }
 
 // InstanceList represents instances that are attached to your load balancer
@@ -85,12 +90,11 @@ type HealthCheck struct {
 // GenericInfo represents generic configuration of your load balancer
 type GenericInfo struct {
 	BalancingAlgorithm string          `json:"balancing_algorithm,omitempty"`
+	Timeout            int             `json:"timeout,omitempty"`
 	SSLRedirect        *bool           `json:"ssl_redirect,omitempty"`
 	StickySessions     *StickySessions `json:"sticky_sessions,omitempty"`
 	ProxyProtocol      *bool           `json:"proxy_protocol,omitempty"`
-	// Deprecated:  PrivateNetwork should no longer be used. Instead, use VPC.
-	PrivateNetwork string `json:"private_network,omitempty"`
-	VPC            string `json:"vpc,omitempty"`
+	VPC                string          `json:"vpc,omitempty"`
 }
 
 // StickySessions represents cookie for your load balancer
@@ -171,8 +175,8 @@ func (l *LoadBalancerHandler) Create(ctx context.Context, createReq *LoadBalance
 }
 
 // Get a load balancer
-func (l *LoadBalancerHandler) Get(ctx context.Context, ID string) (*LoadBalancer, *http.Response, error) {
-	uri := fmt.Sprintf("%s/%s", lbPath, ID)
+func (l *LoadBalancerHandler) Get(ctx context.Context, lbID string) (*LoadBalancer, *http.Response, error) {
+	uri := fmt.Sprintf("%s/%s", lbPath, lbID)
 	req, err := l.client.NewRequest(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, nil, err
@@ -188,8 +192,8 @@ func (l *LoadBalancerHandler) Get(ctx context.Context, ID string) (*LoadBalancer
 }
 
 // Update updates your your load balancer
-func (l *LoadBalancerHandler) Update(ctx context.Context, ID string, updateReq *LoadBalancerReq) error {
-	uri := fmt.Sprintf("%s/%s", lbPath, ID)
+func (l *LoadBalancerHandler) Update(ctx context.Context, lbID string, updateReq *LoadBalancerReq) error {
+	uri := fmt.Sprintf("%s/%s", lbPath, lbID)
 	req, err := l.client.NewRequest(ctx, http.MethodPatch, uri, updateReq)
 	if err != nil {
 		return err
@@ -200,8 +204,8 @@ func (l *LoadBalancerHandler) Update(ctx context.Context, ID string, updateReq *
 }
 
 // Delete a load balancer subscription.
-func (l *LoadBalancerHandler) Delete(ctx context.Context, ID string) error {
-	uri := fmt.Sprintf("%s/%s", lbPath, ID)
+func (l *LoadBalancerHandler) Delete(ctx context.Context, lbID string) error {
+	uri := fmt.Sprintf("%s/%s", lbPath, lbID)
 	req, err := l.client.NewRequest(ctx, http.MethodDelete, uri, nil)
 	if err != nil {
 		return err
@@ -211,7 +215,7 @@ func (l *LoadBalancerHandler) Delete(ctx context.Context, ID string) error {
 }
 
 // List all load balancer subscriptions on the current account.
-func (l *LoadBalancerHandler) List(ctx context.Context, options *ListOptions) ([]LoadBalancer, *Meta, *http.Response, error) {
+func (l *LoadBalancerHandler) List(ctx context.Context, options *ListOptions) ([]LoadBalancer, *Meta, *http.Response, error) { //nolint:dupl
 	req, err := l.client.NewRequest(ctx, http.MethodGet, lbPath, nil)
 	if err != nil {
 		return nil, nil, nil, err
@@ -235,8 +239,8 @@ func (l *LoadBalancerHandler) List(ctx context.Context, options *ListOptions) ([
 
 // CreateForwardingRule will create a new forwarding rule for your load balancer subscription.
 // Note the RuleID will be returned in the ForwardingRule struct
-func (l *LoadBalancerHandler) CreateForwardingRule(ctx context.Context, ID string, rule *ForwardingRule) (*ForwardingRule, *http.Response, error) {
-	uri := fmt.Sprintf("%s/%s/forwarding-rules", lbPath, ID)
+func (l *LoadBalancerHandler) CreateForwardingRule(ctx context.Context, lbID string, rule *ForwardingRule) (*ForwardingRule, *http.Response, error) { //nolint:lll
+	uri := fmt.Sprintf("%s/%s/forwarding-rules", lbPath, lbID)
 	req, err := l.client.NewRequest(ctx, http.MethodPost, uri, rule)
 	if err != nil {
 		return nil, nil, err
@@ -252,8 +256,8 @@ func (l *LoadBalancerHandler) CreateForwardingRule(ctx context.Context, ID strin
 }
 
 // GetForwardingRule will get a forwarding rule from your load balancer subscription.
-func (l *LoadBalancerHandler) GetForwardingRule(ctx context.Context, ID string, ruleID string) (*ForwardingRule, *http.Response, error) {
-	uri := fmt.Sprintf("%s/%s/forwarding-rules/%s", lbPath, ID, ruleID)
+func (l *LoadBalancerHandler) GetForwardingRule(ctx context.Context, lbID, ruleID string) (*ForwardingRule, *http.Response, error) {
+	uri := fmt.Sprintf("%s/%s/forwarding-rules/%s", lbPath, lbID, ruleID)
 	req, err := l.client.NewRequest(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, nil, err
@@ -269,8 +273,8 @@ func (l *LoadBalancerHandler) GetForwardingRule(ctx context.Context, ID string, 
 }
 
 // ListForwardingRules lists all forwarding rules for a load balancer subscription
-func (l *LoadBalancerHandler) ListForwardingRules(ctx context.Context, ID string, options *ListOptions) ([]ForwardingRule, *Meta, *http.Response, error) {
-	uri := fmt.Sprintf("%s/%s/forwarding-rules", lbPath, ID)
+func (l *LoadBalancerHandler) ListForwardingRules(ctx context.Context, lbID string, options *ListOptions) ([]ForwardingRule, *Meta, *http.Response, error) { //nolint:dupl,lll
+	uri := fmt.Sprintf("%s/%s/forwarding-rules", lbPath, lbID)
 	req, err := l.client.NewRequest(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, nil, nil, err
@@ -293,8 +297,8 @@ func (l *LoadBalancerHandler) ListForwardingRules(ctx context.Context, ID string
 }
 
 // DeleteForwardingRule removes a forwarding rule from a load balancer subscription
-func (l *LoadBalancerHandler) DeleteForwardingRule(ctx context.Context, ID string, RuleID string) error {
-	uri := fmt.Sprintf("%s/%s/forwarding-rules/%s", lbPath, ID, RuleID)
+func (l *LoadBalancerHandler) DeleteForwardingRule(ctx context.Context, lbID, ruleID string) error {
+	uri := fmt.Sprintf("%s/%s/forwarding-rules/%s", lbPath, lbID, ruleID)
 	req, err := l.client.NewRequest(ctx, http.MethodDelete, uri, nil)
 	if err != nil {
 		return err
@@ -305,8 +309,8 @@ func (l *LoadBalancerHandler) DeleteForwardingRule(ctx context.Context, ID strin
 }
 
 // GetFirewallRule will get a firewall rule from your load balancer subscription.
-func (l *LoadBalancerHandler) GetFirewallRule(ctx context.Context, ID string, ruleID string) (*LBFirewallRule, *http.Response, error) {
-	uri := fmt.Sprintf("%s/%s/firewall-rules/%s", lbPath, ID, ruleID)
+func (l *LoadBalancerHandler) GetFirewallRule(ctx context.Context, lbID, ruleID string) (*LBFirewallRule, *http.Response, error) {
+	uri := fmt.Sprintf("%s/%s/firewall-rules/%s", lbPath, lbID, ruleID)
 	req, err := l.client.NewRequest(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, nil, err
@@ -322,8 +326,8 @@ func (l *LoadBalancerHandler) GetFirewallRule(ctx context.Context, ID string, ru
 }
 
 // ListFirewallRules lists all firewall rules for a load balancer subscription
-func (l *LoadBalancerHandler) ListFirewallRules(ctx context.Context, ID string, options *ListOptions) ([]LBFirewallRule, *Meta, *http.Response, error) {
-	uri := fmt.Sprintf("%s/%s/firewall-rules", lbPath, ID)
+func (l *LoadBalancerHandler) ListFirewallRules(ctx context.Context, lbID string, options *ListOptions) ([]LBFirewallRule, *Meta, *http.Response, error) { //nolint:dupl,lll
+	uri := fmt.Sprintf("%s/%s/firewall-rules", lbPath, lbID)
 	req, err := l.client.NewRequest(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, nil, nil, err

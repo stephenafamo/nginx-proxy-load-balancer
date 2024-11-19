@@ -1,6 +1,173 @@
 # Change Log
+## [3.11.2]( https://github.com/vultr/govultr/compare/v3.11.1...v3.11.2) (2024-10-30)
+### Bug fixes
+* Database: Fix Kafka advanced config field names [PR 343](https://github.com/vultr/govultr/pull/343)
 
-## GoVultr v1 changelog is located [here](https://github.com/vultr/govultr/blob/v1/CHANGELOG.md)
+## [3.11.1](https://github.com/vultr/govultr/compare/v3.11.0...v3.11.1) (2024-10-24)
+### Bug Fixes
+* Database: Fix quota create endpoint param for Kafka [PR 341](https://github.com/vultr/govultr/pull/341)
+
+## [3.11.0](https://github.com/vultr/govultr/compare/v3.10.0...v3.11.0) (2024-10-22)
+### Enhancements
+* Database: Add support for managed Kafka [PR 337](https://github.com/vultr/govultr/pull/337)
+
+### Automation
+* Remove deprecated exportloopref linter [PR 338](https://github.com/vultr/govultr/pull/338)
+* Add Github CODEOWNERS file [PR 339](https://github.com/vultr/govultr/pull/339)
+
+## [3.10.0](https://github.com/vultr/govultr/compare/v3.9.1...v3.10.0) (2024-10-10)
+### Enhancements
+* Load Balancers: Add HTTP2/3 and timeout options [PR 325](https://github.com/vultr/govultr/pull/325)
+* CDN: add vanity domain and SSL options [PR 326](https://github.com/vultr/govultr/pull/326)
+* Instance: add user scheme field [PR 328](https://github.com/vultr/govultr/pull/328)
+* Bare Metal: add user scheme field [PR 335](https://github.com/vultr/govultr/pull/335)
+* Sub-accounts: Add support for sub-accounts [PR 329](https://github.com/vultr/govultr/pull/329)
+
+### Bug Fixes
+* CDN: Fix default empty struct fields and list files endpoint URL [PR 330](https://github.com/vultr/govultr/pull/330)
+* Sub-accounts: Fix base struct on create [PR 331](https://github.com/vultr/govultr/pull/331)
+
+### Clean Up
+* Remove deprecated private network functionality [PR 324](https://github.com/vultr/govultr/pull/324)
+* Bare Metal: remove deprecated tag fields [PR 327](https://github.com/vultr/govultr/pull/327)
+* Firewall: remove deprecated type fields [PR 327](https://github.com/vultr/govultr/pull/327)
+* Instance: remove deprecated tag fields [PR 327](https://github.com/vultr/govultr/pull/327)
+
+### Dependencies & Automation
+* Update go from v1.21 to v1.23 [PR 333](https://github.com/vultr/govultr/pull/333)
+* Update github workflows to go 1.23 [PR 334](https://github.com/vultr/govultr/pull/334)
+* Add CDN & Sub-account tests [PR 332](https://github.com/vultr/govultr/pull/332)
+
+## [3.9.1](https://github.com/vultr/govultr/compare/v3.9.0...v3.9.1) (2024-08-13)
+### Enhancements
+* Database: Add support for Managed MySQL advanced config [PR 322](https://github.com/vultr/govultr/pull/322)
+
+### Bug Fixes
+* CDN: Fix http method used on push zone file delete [PR 321](https://github.com/vultr/govultr/pull/321)
+
+## [3.9.0](https://github.com/vultr/govultr/compare/v3.8.1...v3.9.0) (2024-06-30)
+### Enhancements
+* CDN: Full support added [PR 319](https://github.com/vultr/govultr/pull/319)
+
+## [3.8.1](https://github.com/vultr/govultr/compare/v3.8.0...v3.8.1) (2023-06-06)
+### Automation
+* Update goreleaser github action from v2 to v6 [PR 317](https://github.com/vultr/govultr/pull/317)
+
+## [3.8.0](https://github.com/vultr/govultr/compare/v3.7.0...v3.8.0) (2023-06-06)
+### Enhancements
+* Inference: add support for serverless inference endpoints [PR 315](https://github.com/vultr/govultr/pull/315)
+
+### Dependencies
+* Bump github.com/hashicorp/go-retryablehttp from 0.7.6 to 0.7.7 [PR 312](https://github.com/vultr/govultr/pull/312)
+
+### Automation
+* Update golangci-lint and enable most go-vet checks [PR 314](https://github.com/vultr/govultr/pull/314)
+
+## [3.7.0](https://github.com/vultr/govultr/compare/v3.6.4...v3.7.0) (2024-05-28)
+### Enhancements
+* Bare Metal: Add MdiskMode to BareMetalCreate and BareMetalUpdate structs [PR 310](https://github.com/vultr/govultr/pull/310)
+
+### Dependencies
+* Bump github.com/hashicorp/go-retryablehttp from 0.7.5 to 0.7.6 [PR 308](https://github.com/vultr/govultr/pull/308)
+* Update Go from v1.20 to v1.21 [PR 309](https://github.com/vultr/govultr/pull/309)
+
+### Automation
+* Update and fix mattermost notifications [PR 305](https://github.com/vultr/govultr/pull/305)
+* Fix mattermost notifications [PR 307](https://github.com/vultr/govultr/pull/307)
+
+### New Contributors
+* @fjoenichols made their first contribution in [PR 310](https://github.com/vultr/govultr/pull/310)
+
+## [3.6.4](https://github.com/vultr/govultr/compare/v3.6.3...v3.6.4) (2024-03-07)
+### Enhancement
+* Kubernetes: add labels to the node pool update request struct [PR 302](https://github.com/vultr/govultr/pull/302)
+
+## [3.6.3](https://github.com/vultr/govultr/compare/v3.6.2...v3.6.3) (2024-02-29)
+### Bug Fixes
+* All: add a json struct tag for the meta links field [PR 298](https://github.com/vultr/govultr/pull/298)
+* Startup Scripts: allow empty values in create/update request struct [PR 299](https://github.com/vultr/govultr/pull/299)
+
+### Automation
+* Update codeql runner from v1 to v2 [PR 300](https://github.com/vultr/govultr/pull/300)
+
+## [v3.6.2](https://github.com/vultr/govultr/compare/v3.6.1...v3.6.2) (2024-02-20)
+### Enhancement
+* Kubernetes: add support for nodepool labels [PR 296](https://github.com/vultr/govultr/pull/296)
+
+## [v3.6.1](https://github.com/vultr/govultr/compare/v3.6.0...v3.6.1) (2024-01-16)
+### Enhancement
+* Bare Metal: add functions to allow VPC [PR 293](https://github.com/vultr/govultr/pull/293)
+
+## [v3.6.0](https://github.com/vultr/govultr/compare/v3.5.0...v3.6.0) (2023-12-15)
+### Enhancement
+* Marketplace: add support for new API route [PR 291](https://github.com/vultr/govultr/pull/291)
+* Bare Metal: add marketplace app variables [PR 291](https://github.com/vultr/govultr/pull/291)
+* Instance: add marketplace app variables [PR 291](https://github.com/vultr/govultr/pull/291)
+
+### Documentation
+* Update the README with non-auth client examples [PR 290](https://github.com/vultr/govultr/pull/290)
+
+## [v3.5.0](https://github.com/vultr/govultr/compare/v3.4.1...v3.5.0) (2023-12-01)
+### Enhancement
+* Instance: Add disable IPv4 option create request [PR 287](https://github.com/vultr/govultr/pull/287)
+* Database: Add user access control for Redis [PR 288](https://github.com/vultr/govultr/pull/288)
+
+## [v3.4.1](https://github.com/vultr/govultr/compare/v3.4.0...v3.4.1) (2023-11-17)
+### Enhancement
+* Database: Add support for usage endpoint [PR 282](https://github.com/vultr/govultr/pull/282)
+
+### Bug Fix
+* Container Registry: minor API fixes [PR 284](https://github.com/vultr/govultr/pull/284)
+
+## [v3.4.0](https://github.com/vultr/govultr/compare/v3.3.4...v3.4.0) (2023-11-10)
+### Enhancements
+* Database: Support read replica promotion [PR 276](https://github.com/vultr/govultr/pull/276)
+* Kubernetes: Add managed firewall support [PR 277](https://github.com/vultr/govultr/pull/277)
+* Container Registry: Add support for container registry operations [PR 278](https://github.com/vultr/govultr/pull/278)
+
+### Dependencies
+* Bump github.com/hashicorp/go-retryablehttp from 0.7.4 to 0.7.5 [PR 280](https://github.com/vultr/govultr/pull/280)
+
+### New Contributors
+* @Byteflux made their first contribution in [PR 277](https://github.com/vultr/govultr/pull/277)
+
+## [v3.3.4](https://github.com/vultr/govultr/compare/v3.3.3...v3.3.4) (2023-10-30)
+### Enhancements
+* Database: Add support for FerretDB [PR 272](https://github.com/vultr/govultr/pull/272)
+* Kubernetes: Add HA control planes support [PR 273](https://github.com/vultr/govultr/pull/273)
+
+## [v3.3.3](https://github.com/vultr/govultr/compare/v3.3.2...v3.3.3) (2023-10-24)
+### Bug Fixes
+* Database: Change VPCID to pointer for empty & nil values in updates [PR 270](https://github.com/vultr/govultr/pull/270)
+
+## [v3.3.2](https://github.com/vultr/govultr/compare/v3.3.1...v3.3.2) (2023-10-23)
+### Enhancements
+* General: Remove references to deprecated V1 API [PR 266](https://github.com/vultr/govultr/pull/266)
+* Database: Add support for public/private hostnames [PR 268](https://github.com/vultr/govultr/pull/268)
+
+## [v3.3.1](https://github.com/vultr/govultr/compare/v3.3.0...v3.3.1) (2023-08-18)
+### Enhancements
+* VPC2: Add nodes endpoints [PR 263](https://github.com/vultr/govultr/pull/263)
+
+## [v3.3.0](https://github.com/vultr/govultr/compare/v3.2.0...v3.3.0) (2023-08-10)
+### Enhancements
+* Add VPC2 [PR 261](https://github.com/vultr/govultr/pull/261)
+* Bare Metal/Instances: Add support for VPC 2.0 [PR 261](https://github.com/vultr/govultr/pull/261)
+
+### New Contributors
+* @ogawa0071 made their first contribution in [PR 261](https://github.com/vultr/govultr/pull/261)
+
+## [v3.2.0](https://github.com/vultr/govultr/compare/v3.1.0...v3.2.0) (2023-07-24)
+### Enhancements
+* Database: add support for DBaaS VPC networks [PR 255](https://github.com/vultr/govultr/pull/255)
+* Implement stricter golangci-lint configurations [PR 259](https://github.com/vultr/govultr/pull/259)
+
+## [v3.1.0](https://github.com/vultr/govultr/compare/v3.0.3...v3.1.0) (2023-07-13)
+### Enhancements
+* Loadbalancers: add support for multi-nodes in [PR 250](https://github.com/vultr/govultr/pull/250)
+
+### New Contributors
+* @happytreees made their first contribution in [PR 250](https://github.com/vultr/govultr/pull/250)
 
 ## [v3.0.3](https://github.com/vultr/govultr/compare/v3.0.2...v3.0.3) (2023-06-07)
 ### Enhancements

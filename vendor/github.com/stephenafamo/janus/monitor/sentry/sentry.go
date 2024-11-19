@@ -23,12 +23,10 @@ func (s Sentry) Middleware(next http.Handler) http.Handler {
 		r = r.WithContext(context.WithValue(r.Context(), monitor.CtxRequest, r))
 
 		s.Hub.WithScope(func(scope *sentry.Scope) {
-			scope.SetTransaction(r.URL.Path)
-
 			span := sentry.StartSpan(
 				r.Context(),
 				"request",
-				sentry.TransactionName(r.URL.Path),
+				sentry.WithTransactionName(r.Host+r.URL.Path),
 				sentry.ContinueFromRequest(r),
 			)
 			defer span.Finish()
@@ -55,7 +53,7 @@ func (s Sentry) Middleware(next http.Handler) http.Handler {
 }
 
 func (s Sentry) StartSpan(ctx context.Context, name string) (context.Context, monitor.Span) {
-	span := sentry.StartSpan(ctx, name)
+	span := sentry.StartSpan(ctx, name, sentry.WithTransactionName(name))
 	return span.Context(), span
 }
 
@@ -79,10 +77,6 @@ func (s Sentry) Flush(timeout time.Duration) {
 
 type SentryScope struct {
 	scope *sentry.Scope
-}
-
-func (s SentryScope) SetTransactionName(name string) {
-	s.scope.SetTransaction(name)
 }
 
 func (s SentryScope) SetTag(key, value string) {

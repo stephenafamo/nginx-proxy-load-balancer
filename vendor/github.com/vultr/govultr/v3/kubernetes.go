@@ -43,33 +43,36 @@ type KubernetesHandler struct {
 
 // Cluster represents a full VKE cluster
 type Cluster struct {
-	ID            string     `json:"id"`
-	Label         string     `json:"label"`
-	DateCreated   string     `json:"date_created"`
-	ClusterSubnet string     `json:"cluster_subnet"`
-	ServiceSubnet string     `json:"service_subnet"`
-	IP            string     `json:"ip"`
-	Endpoint      string     `json:"endpoint"`
-	Version       string     `json:"version"`
-	Region        string     `json:"region"`
-	Status        string     `json:"status"`
-	NodePools     []NodePool `json:"node_pools"`
+	ID              string     `json:"id"`
+	Label           string     `json:"label"`
+	DateCreated     string     `json:"date_created"`
+	ClusterSubnet   string     `json:"cluster_subnet"`
+	ServiceSubnet   string     `json:"service_subnet"`
+	IP              string     `json:"ip"`
+	Endpoint        string     `json:"endpoint"`
+	Version         string     `json:"version"`
+	Region          string     `json:"region"`
+	Status          string     `json:"status"`
+	HAControlPlanes bool       `json:"ha_controlplanes"`
+	FirewallGroupID string     `json:"firewall_group_id"`
+	NodePools       []NodePool `json:"node_pools"`
 }
 
 // NodePool represents a pool of nodes that are grouped by their label and plan type
 type NodePool struct {
-	ID           string `json:"id"`
-	DateCreated  string `json:"date_created"`
-	DateUpdated  string `json:"date_updated"`
-	Label        string `json:"label"`
-	Plan         string `json:"plan"`
-	Status       string `json:"status"`
-	NodeQuantity int    `json:"node_quantity"`
-	MinNodes     int    `json:"min_nodes"`
-	MaxNodes     int    `json:"max_nodes"`
-	AutoScaler   bool   `json:"auto_scaler"`
-	Tag          string `json:"tag"`
-	Nodes        []Node `json:"nodes"`
+	ID           string            `json:"id"`
+	DateCreated  string            `json:"date_created"`
+	DateUpdated  string            `json:"date_updated"`
+	Label        string            `json:"label"`
+	Plan         string            `json:"plan"`
+	Status       string            `json:"status"`
+	NodeQuantity int               `json:"node_quantity"`
+	MinNodes     int               `json:"min_nodes"`
+	MaxNodes     int               `json:"max_nodes"`
+	AutoScaler   bool              `json:"auto_scaler"`
+	Tag          string            `json:"tag"`
+	Labels       map[string]string `json:"labels"`
+	Nodes        []Node            `json:"nodes"`
 }
 
 // Node represents a node that will live within a nodepool
@@ -87,10 +90,12 @@ type KubeConfig struct {
 
 // ClusterReq struct used to create a cluster
 type ClusterReq struct {
-	Label     string        `json:"label"`
-	Region    string        `json:"region"`
-	Version   string        `json:"version"`
-	NodePools []NodePoolReq `json:"node_pools"`
+	Label           string        `json:"label"`
+	Region          string        `json:"region"`
+	Version         string        `json:"version"`
+	HAControlPlanes bool          `json:"ha_controlplanes,omitempty"`
+	EnableFirewall  bool          `json:"enable_firewall,omitempty"`
+	NodePools       []NodePoolReq `json:"node_pools"`
 }
 
 // ClusterReqUpdate struct used to update update a cluster
@@ -100,22 +105,24 @@ type ClusterReqUpdate struct {
 
 // NodePoolReq struct used to create a node pool
 type NodePoolReq struct {
-	NodeQuantity int    `json:"node_quantity"`
-	Label        string `json:"label"`
-	Plan         string `json:"plan"`
-	Tag          string `json:"tag"`
-	MinNodes     int    `json:"min_nodes,omitempty"`
-	MaxNodes     int    `json:"max_nodes,omitempty"`
-	AutoScaler   *bool  `json:"auto_scaler"`
+	NodeQuantity int               `json:"node_quantity"`
+	Label        string            `json:"label"`
+	Plan         string            `json:"plan"`
+	Tag          string            `json:"tag"`
+	MinNodes     int               `json:"min_nodes,omitempty"`
+	MaxNodes     int               `json:"max_nodes,omitempty"`
+	AutoScaler   *bool             `json:"auto_scaler"`
+	Labels       map[string]string `json:"labels,omitempty"`
 }
 
 // NodePoolReqUpdate struct used to update a node pool
 type NodePoolReqUpdate struct {
-	NodeQuantity int     `json:"node_quantity,omitempty"`
-	Tag          *string `json:"tag,omitempty"`
-	MinNodes     int     `json:"min_nodes,omitempty"`
-	MaxNodes     int     `json:"max_nodes,omitempty"`
-	AutoScaler   *bool   `json:"auto_scaler,omitempty"`
+	NodeQuantity int               `json:"node_quantity,omitempty"`
+	Tag          *string           `json:"tag,omitempty"`
+	MinNodes     int               `json:"min_nodes,omitempty"`
+	MaxNodes     int               `json:"max_nodes,omitempty"`
+	AutoScaler   *bool             `json:"auto_scaler,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
 }
 
 type vkeClustersBase struct {
@@ -184,7 +191,7 @@ func (k *KubernetesHandler) GetCluster(ctx context.Context, id string) (*Cluster
 }
 
 // ListClusters will return all kubernetes clusters.
-func (k *KubernetesHandler) ListClusters(ctx context.Context, options *ListOptions) ([]Cluster, *Meta, *http.Response, error) {
+func (k *KubernetesHandler) ListClusters(ctx context.Context, options *ListOptions) ([]Cluster, *Meta, *http.Response, error) { //nolint:dupl,lll
 	req, err := k.client.NewRequest(ctx, http.MethodGet, vkePath, nil)
 	if err != nil {
 		return nil, nil, nil, err
@@ -254,7 +261,7 @@ func (k *KubernetesHandler) CreateNodePool(ctx context.Context, vkeID string, no
 }
 
 // ListNodePools will return all nodepools for a given VKE cluster
-func (k *KubernetesHandler) ListNodePools(ctx context.Context, vkeID string, options *ListOptions) ([]NodePool, *Meta, *http.Response, error) {
+func (k *KubernetesHandler) ListNodePools(ctx context.Context, vkeID string, options *ListOptions) ([]NodePool, *Meta, *http.Response, error) { //nolint:lll,dupl
 	req, err := k.client.NewRequest(ctx, http.MethodGet, fmt.Sprintf("%s/%s/node-pools", vkePath, vkeID), nil)
 	if err != nil {
 		return nil, nil, nil, err
@@ -293,7 +300,7 @@ func (k *KubernetesHandler) GetNodePool(ctx context.Context, vkeID, nodePoolID s
 }
 
 // UpdateNodePool will allow you change the quantity of nodes within a nodepool
-func (k *KubernetesHandler) UpdateNodePool(ctx context.Context, vkeID, nodePoolID string, updateReq *NodePoolReqUpdate) (*NodePool, *http.Response, error) {
+func (k *KubernetesHandler) UpdateNodePool(ctx context.Context, vkeID, nodePoolID string, updateReq *NodePoolReqUpdate) (*NodePool, *http.Response, error) { //nolint:lll
 	req, err := k.client.NewRequest(ctx, http.MethodPatch, fmt.Sprintf("%s/%s/node-pools/%s", vkePath, vkeID, nodePoolID), updateReq)
 	if err != nil {
 		return nil, nil, err
@@ -321,7 +328,12 @@ func (k *KubernetesHandler) DeleteNodePool(ctx context.Context, vkeID, nodePoolI
 
 // DeleteNodePoolInstance will remove a specified node from a nodepool
 func (k *KubernetesHandler) DeleteNodePoolInstance(ctx context.Context, vkeID, nodePoolID, nodeID string) error {
-	req, err := k.client.NewRequest(ctx, http.MethodDelete, fmt.Sprintf("%s/%s/node-pools/%s/nodes/%s", vkePath, vkeID, nodePoolID, nodeID), nil)
+	req, err := k.client.NewRequest(
+		ctx,
+		http.MethodDelete,
+		fmt.Sprintf("%s/%s/node-pools/%s/nodes/%s", vkePath, vkeID, nodePoolID, nodeID),
+		nil,
+	)
 	if err != nil {
 		return err
 	}
@@ -332,7 +344,12 @@ func (k *KubernetesHandler) DeleteNodePoolInstance(ctx context.Context, vkeID, n
 
 // RecycleNodePoolInstance will recycle (destroy + redeploy) a given node on a nodepool
 func (k *KubernetesHandler) RecycleNodePoolInstance(ctx context.Context, vkeID, nodePoolID, nodeID string) error {
-	req, err := k.client.NewRequest(ctx, http.MethodPost, fmt.Sprintf("%s/%s/node-pools/%s/nodes/%s/recycle", vkePath, vkeID, nodePoolID, nodeID), nil)
+	req, err := k.client.NewRequest(
+		ctx,
+		http.MethodPost,
+		fmt.Sprintf("%s/%s/node-pools/%s/nodes/%s/recycle", vkePath, vkeID, nodePoolID, nodeID),
+		nil,
+	)
 	if err != nil {
 		return err
 	}
@@ -392,7 +409,6 @@ func (k *KubernetesHandler) GetUpgrades(ctx context.Context, vkeID string) ([]st
 
 // Upgrade beings a VKE cluster upgrade
 func (k *KubernetesHandler) Upgrade(ctx context.Context, vkeID string, body *ClusterUpgradeReq) error {
-
 	req, err := k.client.NewRequest(ctx, http.MethodPost, fmt.Sprintf("%s/%s/upgrades", vkePath, vkeID), body)
 	if err != nil {
 		return err

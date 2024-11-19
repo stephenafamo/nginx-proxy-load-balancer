@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -17,6 +16,9 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/debug"
 )
+
+// The identifier of the SDK.
+const sdkIdentifier = "sentry.go"
 
 // maxErrorDepth is the maximum number of errors reported in a chain of errors.
 // This protects the SDK from an arbitrarily long chain of wrapped errors.
@@ -88,7 +90,7 @@ type EventProcessor func(event *Event, hint *EventHint) *Event
 // ApplyToEvent changes an event based on external data and/or
 // an event hint.
 type EventModifier interface {
-	ApplyToEvent(event *Event, hint *EventHint) *Event
+	ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event
 }
 
 var globalEventProcessors []EventProcessor
@@ -131,10 +133,16 @@ type ClientOptions struct {
 	TracesSampleRate float64
 	// Used to customize the sampling of traces, overrides TracesSampleRate.
 	TracesSampler TracesSampler
+	// The sample rate for profiling traces in the range [0.0, 1.0].
+	// This is relative to TracesSampleRate - it is a ratio of profiled traces out of all sampled traces.
+	ProfilesSampleRate float64
 	// List of regexp strings that will be used to match against event's message
 	// and if applicable, caught errors type and value.
 	// If the match is found, then a whole event will be dropped.
 	IgnoreErrors []string
+	// List of regexp strings that will be used to match against a transaction's
+	// name.  If a match is found, then the transaction  will be dropped.
+	IgnoreTransactions []string
 	// If this flag is enabled, certain personally identifiable information (PII) is added by active integrations.
 	// By default, no such data is sent.
 	SendDefaultPII bool
@@ -216,15 +224,20 @@ type ClientOptions struct {
 	// is not optimized for long chains either. The top-level error together with a
 	// stack trace is often the most useful information.
 	MaxErrorDepth int
+	// Default event tags. These are overridden by tags set on a scope.
+	Tags map[string]string
 }
 
 // Client is the underlying processor that is used by the main API and Hub
 // instances. It must be created with NewClient.
 type Client struct {
+	mu              sync.RWMutex
 	options         ClientOptions
 	dsn             *Dsn
 	eventProcessors []EventProcessor
 	integrations    []Integration
+	sdkIdentifier   string
+	sdkVersion      string
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
 	Transport Transport
@@ -238,6 +251,28 @@ type Client struct {
 // single goroutine) or hub methods (for concurrent programs, for example web
 // servers).
 func NewClient(options ClientOptions) (*Client, error) {
+	// The default error event sample rate for all SDKs is 1.0 (send all).
+	//
+	// In Go, the zero value (default) for float64 is 0.0, which means that
+	// constructing a client with NewClient(ClientOptions{}), or, equivalently,
+	// initializing the SDK with Init(ClientOptions{}) without an explicit
+	// SampleRate would drop all events.
+	//
+	// To retain the desired default behavior, we exceptionally flip SampleRate
+	// from 0.0 to 1.0 here. Setting the sample rate to 0.0 is not very useful
+	// anyway, and the same end result can be achieved in many other ways like
+	// not initializing the SDK, setting the DSN to the empty string or using an
+	// event processor that always returns nil.
+	//
+	// An alternative API could be such that default options don't need to be
+	// the same as Go's zero values, for example using the Functional Options
+	// pattern. That would either require a breaking change if we want to reuse
+	// the obvious NewClient name, or a new function as an alternative
+	// constructor.
+	if options.SampleRate == 0.0 {
+		options.SampleRate = 1.0
+	}
+
 	if options.Debug {
 		debugWriter := options.DebugWriter
 		if debugWriter == nil {
@@ -299,8 +334,10 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	client := Client{
-		options: options,
-		dsn:     dsn,
+		options:       options,
+		dsn:           dsn,
+		sdkIdentifier: sdkIdentifier,
+		sdkVersion:    SDKVersion,
 	}
 
 	client.setupTransport()
@@ -339,6 +376,8 @@ func (client *Client) setupIntegrations() {
 		new(environmentIntegration),
 		new(modulesIntegration),
 		new(ignoreErrorsIntegration),
+		new(ignoreTransactionsIntegration),
+		new(globalTagsIntegration),
 	}
 
 	if client.options.Integrations != nil {
@@ -372,20 +411,31 @@ func (client *Client) AddEventProcessor(processor EventProcessor) {
 }
 
 // Options return ClientOptions for the current Client.
-func (client Client) Options() ClientOptions {
+func (client *Client) Options() ClientOptions {
+	// Note: internally, consider using `client.options` instead of `client.Options()` to avoid copying the object each time.
 	return client.options
 }
 
 // CaptureMessage captures an arbitrary message.
 func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier) *EventID {
-	event := client.eventFromMessage(message, LevelInfo)
+	event := client.EventFromMessage(message, LevelInfo)
 	return client.CaptureEvent(event, hint, scope)
 }
 
 // CaptureException captures an error.
 func (client *Client) CaptureException(exception error, hint *EventHint, scope EventModifier) *EventID {
-	event := client.eventFromException(exception, LevelError)
+	event := client.EventFromException(exception, LevelError)
 	return client.CaptureEvent(event, hint, scope)
+}
+
+// CaptureCheckIn captures a check in.
+func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig, scope EventModifier) *EventID {
+	event := client.EventFromCheckIn(checkIn, monitorConfig)
+	if event != nil && event.CheckIn != nil {
+		client.CaptureEvent(event, nil, scope)
+		return &event.CheckIn.ID
+	}
+	return nil
 }
 
 // CaptureEvent captures an event on the currently active client if any.
@@ -439,11 +489,11 @@ func (client *Client) RecoverWithContext(
 	var event *Event
 	switch err := err.(type) {
 	case error:
-		event = client.eventFromException(err, LevelFatal)
+		event = client.EventFromException(err, LevelFatal)
 	case string:
-		event = client.eventFromMessage(err, LevelFatal)
+		event = client.EventFromMessage(err, LevelFatal)
 	default:
-		event = client.eventFromMessage(fmt.Sprintf("%#v", err), LevelFatal)
+		event = client.EventFromMessage(fmt.Sprintf("%#v", err), LevelFatal)
 	}
 	return client.CaptureEvent(event, hint, scope)
 }
@@ -463,16 +513,17 @@ func (client *Client) Flush(timeout time.Duration) bool {
 	return client.Transport.Flush(timeout)
 }
 
-func (client *Client) eventFromMessage(message string, level Level) *Event {
+// EventFromMessage creates an event from the given message string.
+func (client *Client) EventFromMessage(message string, level Level) *Event {
 	if message == "" {
 		err := usageError{fmt.Errorf("%s called with empty message", callerFunctionName())}
-		return client.eventFromException(err, level)
+		return client.EventFromException(err, level)
 	}
 	event := NewEvent()
 	event.Level = level
 	event.Message = message
 
-	if client.Options().AttachStacktrace {
+	if client.options.AttachStacktrace {
 		event.Threads = []Thread{{
 			Stacktrace: NewStacktrace(),
 			Crashed:    false,
@@ -483,43 +534,60 @@ func (client *Client) eventFromMessage(message string, level Level) *Event {
 	return event
 }
 
-func (client *Client) eventFromException(exception error, level Level) *Event {
+// EventFromException creates a new Sentry event from the given `error` instance.
+func (client *Client) EventFromException(exception error, level Level) *Event {
+	event := NewEvent()
+	event.Level = level
+
 	err := exception
 	if err == nil {
 		err = usageError{fmt.Errorf("%s called with nil error", callerFunctionName())}
 	}
 
-	event := NewEvent()
-	event.Level = level
-
-	for i := 0; i < client.options.MaxErrorDepth && err != nil; i++ {
-		event.Exception = append(event.Exception, Exception{
-			Value:      err.Error(),
-			Type:       reflect.TypeOf(err).String(),
-			Stacktrace: ExtractStacktrace(err),
-		})
-		switch previous := err.(type) {
-		case interface{ Unwrap() error }:
-			err = previous.Unwrap()
-		case interface{ Cause() error }:
-			err = previous.Cause()
-		default:
-			err = nil
-		}
-	}
-
-	// Add a trace of the current stack to the most recent error in a chain if
-	// it doesn't have a stack trace yet.
-	// We only add to the most recent error to avoid duplication and because the
-	// current stack is most likely unrelated to errors deeper in the chain.
-	if event.Exception[0].Stacktrace == nil {
-		event.Exception[0].Stacktrace = NewStacktrace()
-	}
-
-	// event.Exception should be sorted such that the most recent error is last.
-	reverse(event.Exception)
+	event.SetException(err, client.options.MaxErrorDepth)
 
 	return event
+}
+
+// EventFromCheckIn creates a new Sentry event from the given `check_in` instance.
+func (client *Client) EventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *Event {
+	if checkIn == nil {
+		return nil
+	}
+
+	event := NewEvent()
+	event.Type = checkInType
+
+	var checkInID EventID
+	if checkIn.ID == "" {
+		checkInID = EventID(uuid())
+	} else {
+		checkInID = checkIn.ID
+	}
+
+	event.CheckIn = &CheckIn{
+		ID:          checkInID,
+		MonitorSlug: checkIn.MonitorSlug,
+		Status:      checkIn.Status,
+		Duration:    checkIn.Duration,
+	}
+	event.MonitorConfig = monitorConfig
+
+	return event
+}
+
+func (client *Client) SetSDKIdentifier(identifier string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	client.sdkIdentifier = identifier
+}
+
+func (client *Client) GetSDKIdentifier() string {
+	client.mu.RLock()
+	defer client.mu.RUnlock()
+
+	return client.sdkIdentifier
 }
 
 // reverse reverses the slice a in place.
@@ -536,34 +604,10 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		return client.CaptureException(err, hint, scope)
 	}
 
-	options := client.Options()
-
-	// The default error event sample rate for all SDKs is 1.0 (send all).
-	//
-	// In Go, the zero value (default) for float64 is 0.0, which means that
-	// constructing a client with NewClient(ClientOptions{}), or, equivalently,
-	// initializing the SDK with Init(ClientOptions{}) without an explicit
-	// SampleRate would drop all events.
-	//
-	// To retain the desired default behavior, we exceptionally flip SampleRate
-	// from 0.0 to 1.0 here. Setting the sample rate to 0.0 is not very useful
-	// anyway, and the same end result can be achieved in many other ways like
-	// not initializing the SDK, setting the DSN to the empty string or using an
-	// event processor that always returns nil.
-	//
-	// An alternative API could be such that default options don't need to be
-	// the same as Go's zero values, for example using the Functional Options
-	// pattern. That would either require a breaking change if we want to reuse
-	// the obvious NewClient name, or a new function as an alternative
-	// constructor.
-	if options.SampleRate == 0.0 {
-		options.SampleRate = 1.0
-	}
-
 	// Transactions are sampled by options.TracesSampleRate or
-	// options.TracesSampler when they are started. All other events
-	// (errors, messages) are sampled here.
-	if event.Type != transactionType && !sample(options.SampleRate) {
+	// options.TracesSampler when they are started. Other events
+	// (errors, messages) are sampled here. Does not apply to check-ins.
+	if event.Type != transactionType && event.Type != checkInType && !sample(client.options.SampleRate) {
 		Logger.Println("Event dropped due to SampleRate hit.")
 		return nil
 	}
@@ -576,15 +620,15 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	if hint == nil {
 		hint = &EventHint{}
 	}
-	if event.Type == transactionType && options.BeforeSendTransaction != nil {
+	if event.Type == transactionType && client.options.BeforeSendTransaction != nil {
 		// Transaction events
-		if event = options.BeforeSendTransaction(event, hint); event == nil {
+		if event = client.options.BeforeSendTransaction(event, hint); event == nil {
 			Logger.Println("Transaction dropped due to BeforeSendTransaction callback.")
 			return nil
 		}
-	} else if event.Type != transactionType && options.BeforeSend != nil {
+	} else if event.Type != transactionType && event.Type != checkInType && client.options.BeforeSend != nil {
 		// All other events
-		if event = options.BeforeSend(event, hint); event == nil {
+		if event = client.options.BeforeSend(event, hint); event == nil {
 			Logger.Println("Event dropped due to BeforeSend callback.")
 			return nil
 		}
@@ -597,6 +641,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 
 func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventModifier) *Event {
 	if event.EventID == "" {
+		// TODO set EventID when the event is created, same as in other SDKs. It's necessary for profileTransaction.ID.
 		event.EventID = EventID(uuid())
 	}
 
@@ -609,7 +654,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	}
 
 	if event.ServerName == "" {
-		event.ServerName = client.Options().ServerName
+		event.ServerName = client.options.ServerName
 
 		if event.ServerName == "" {
 			event.ServerName = hostname
@@ -617,20 +662,20 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	}
 
 	if event.Release == "" {
-		event.Release = client.Options().Release
+		event.Release = client.options.Release
 	}
 
 	if event.Dist == "" {
-		event.Dist = client.Options().Dist
+		event.Dist = client.options.Dist
 	}
 
 	if event.Environment == "" {
-		event.Environment = client.Options().Environment
+		event.Environment = client.options.Environment
 	}
 
 	event.Platform = "go"
 	event.Sdk = SdkInfo{
-		Name:         SDKIdentifier,
+		Name:         client.GetSDKIdentifier(),
 		Version:      SDKVersion,
 		Integrations: client.listIntegrations(),
 		Packages: []SdkPackage{{
@@ -640,7 +685,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	}
 
 	if scope != nil {
-		event = scope.ApplyToEvent(event, hint)
+		event = scope.ApplyToEvent(event, hint, client)
 		if event == nil {
 			return nil
 		}
@@ -664,10 +709,14 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		}
 	}
 
+	if event.sdkMetaData.transactionProfile != nil {
+		event.sdkMetaData.transactionProfile.UpdateFromEvent(event)
+	}
+
 	return event
 }
 
-func (client Client) listIntegrations() []string {
+func (client *Client) listIntegrations() []string {
 	integrations := make([]string, len(client.integrations))
 	for i, integration := range client.integrations {
 		integrations[i] = integration.Name()
@@ -675,7 +724,7 @@ func (client Client) listIntegrations() []string {
 	return integrations
 }
 
-func (client Client) integrationAlreadyInstalled(name string) bool {
+func (client *Client) integrationAlreadyInstalled(name string) bool {
 	for _, integration := range client.integrations {
 		if integration.Name() == name {
 			return true

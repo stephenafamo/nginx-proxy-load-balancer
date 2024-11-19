@@ -1,51 +1,45 @@
 package orchestra
 
 import (
-	"errors"
-	"fmt"
+	"context"
+	"log/slog"
 )
 
 // Logger is accepted by some Players ([Conductor], [ServerPlayer])
 type Logger interface {
-	Log(keyvals ...interface{}) error
+	Info(msg string, attrs ...slog.Attr)
+	Error(msg string, attrs ...slog.Attr)
+	WithGroup(name string) Logger
+}
+
+var _ slogInterface = &slog.Logger{}
+
+type slogInterface interface {
+	LogAttrs(ctx context.Context, level slog.Level, msg string, attrs ...slog.Attr)
+	WithGroup(name string) *slog.Logger
+}
+
+func LoggerFromSlog(infoLevel, errorLevel slog.Level, l slogInterface) Logger {
+	return slogLogger{infoLevel, errorLevel, l}
 }
 
 // DefaultLogger is used when a conductor's logger is nil
-var DefaultLogger Logger = defaultLogger{}
+var DefaultLogger Logger = LoggerFromSlog(slog.LevelInfo, slog.LevelError, slog.Default())
 
-type defaultLogger struct{}
-
-func (d defaultLogger) Log(keyvals ...interface{}) error {
-	pairLen := len(keyvals)
-
-	if pairLen < 1 || pairLen%2 != 0 {
-		return errors.New("non-even number of values to log")
-	}
-
-	for i := range keyvals {
-		if i%2 != 0 {
-			continue
-		}
-
-		fmt.Printf("%v=%q ", keyvals[i], keyvals[i+1])
-	}
-
-	// Move to next line
-	fmt.Println()
-
-	return nil
+type slogLogger struct {
+	lvlInfo  slog.Level
+	lvlError slog.Level
+	logger   slogInterface
 }
 
-type subConductorLogger struct {
-	name string
-	l    Logger
+func (d slogLogger) Info(msg string, attrs ...slog.Attr) {
+	d.logger.LogAttrs(context.Background(), d.lvlInfo, msg, attrs...)
 }
 
-func (s subConductorLogger) Log(keyvals ...interface{}) error {
-	l := s.l
-	if s.l == nil {
-		l = DefaultLogger
-	}
+func (d slogLogger) Error(msg string, attrs ...slog.Attr) {
+	d.logger.LogAttrs(context.Background(), d.lvlError, msg, attrs...)
+}
 
-	return l.Log(append([]interface{}{"conductor", s.name}, keyvals...)...)
+func (d slogLogger) WithGroup(name string) Logger {
+	return slogLogger{d.lvlInfo, d.lvlError, d.logger.WithGroup(name)}
 }

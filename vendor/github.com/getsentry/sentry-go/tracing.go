@@ -9,12 +9,27 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
 	SentryTraceHeader   = "sentry-trace"
 	SentryBaggageHeader = "baggage"
+)
+
+// SpanOrigin indicates what created a trace or a span. See: https://develop.sentry.dev/sdk/performance/trace-origin/
+type SpanOrigin string
+
+const (
+	SpanOriginManual   = "manual"
+	SpanOriginEcho     = "auto.http.echo"
+	SpanOriginFastHTTP = "auto.http.fasthttp"
+	SpanOriginFiber    = "auto.http.fiber"
+	SpanOriginGin      = "auto.http.gin"
+	SpanOriginStdLib   = "auto.http.stdlib"
+	SpanOriginIris     = "auto.http.iris"
+	SpanOriginNegroni  = "auto.http.negroni"
 )
 
 // A Span is the building block of a Sentry transaction. Spans build up a tree
@@ -26,6 +41,7 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	TraceID      TraceID                `json:"trace_id"`
 	SpanID       SpanID                 `json:"span_id"`
 	ParentSpanID SpanID                 `json:"parent_span_id"`
+	Name         string                 `json:"name,omitempty"`
 	Op           string                 `json:"op,omitempty"`
 	Description  string                 `json:"description,omitempty"`
 	Status       SpanStatus             `json:"status,omitempty"`
@@ -35,7 +51,10 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	Data         map[string]interface{} `json:"data,omitempty"`
 	Sampled      Sampled                `json:"-"`
 	Source       TransactionSource      `json:"-"`
+	Origin       SpanOrigin             `json:"origin,omitempty"`
 
+	// mu protects concurrent writes to map fields
+	mu sync.RWMutex
 	// sample rate the span was sampled with.
 	sampleRate float64
 	// ctx is the context where the span was started. Always non-nil.
@@ -45,13 +64,14 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	// parent refers to the immediate local parent span. A remote parent span is
 	// only referenced by setting ParentSpanID.
 	parent *Span
-	// isTransaction is true only for the root span of a local span tree. The
-	// root span is the first span started in a context. Note that a local root
-	// span may have a remote parent belonging to the same trace, therefore
-	// isTransaction depends on ctx and not on parent.
-	isTransaction bool
 	// recorder stores all spans in a transaction. Guaranteed to be non-nil.
 	recorder *spanRecorder
+	// span context, can only be set on transactions
+	contexts map[string]Context
+	// collectProfile is a function that collects a profile of the current transaction. May be nil.
+	collectProfile transactionProfiler
+	// a Once instance to make sure that Finish() is only called once.
+	finishOnce sync.Once
 }
 
 // TraceParentContext describes the context of a (remote) parent span.
@@ -104,15 +124,23 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		StartTime: time.Now(),
 		Sampled:   SampledUndefined,
 
-		ctx:           context.WithValue(ctx, spanContextKey{}, &span),
-		parent:        parent,
-		isTransaction: !hasParent,
+		ctx:    context.WithValue(ctx, spanContextKey{}, &span),
+		parent: parent,
 	}
+
+	_, err := rand.Read(span.SpanID[:])
+	if err != nil {
+		panic(err)
+	}
+
 	if hasParent {
 		span.TraceID = parent.TraceID
+		span.ParentSpanID = parent.SpanID
+		span.Origin = parent.Origin
 	} else {
 		// Only set the Source if this is a transaction
 		span.Source = SourceCustom
+		span.Origin = SpanOriginManual
 
 		// Implementation note:
 		//
@@ -149,13 +177,6 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 			panic(err)
 		}
 	}
-	_, err := rand.Read(span.SpanID[:])
-	if err != nil {
-		panic(err)
-	}
-	if hasParent {
-		span.ParentSpanID = parent.SpanID
-	}
 
 	// Apply options to override defaults.
 	for _, option := range options {
@@ -164,45 +185,38 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 
 	span.Sampled = span.sample()
 
+	span.recorder = &spanRecorder{}
 	if hasParent {
 		span.recorder = parent.spanRecorder()
-	} else {
-		span.recorder = &spanRecorder{}
 	}
+
 	span.recorder.record(&span)
 
-	// Update scope so that all events include a trace context, allowing
-	// Sentry to correlate errors to transactions/spans.
-	hubFromContext(ctx).Scope().SetContext("trace", span.traceContext().Map())
+	clientOptions := span.clientOptions()
+	if clientOptions.EnableTracing {
+		hub := hubFromContext(ctx)
+		if !span.IsTransaction() {
+			// Push a new scope to stack for non transaction span
+			hub.PushScope()
+		}
+		hub.Scope().SetSpan(&span)
+	}
+
+	// Start profiling only if it's a sampled root transaction.
+	if span.IsTransaction() && span.Sampled.Bool() {
+		span.sampleTransactionProfile()
+	}
 
 	return &span
 }
 
 // Finish sets the span's end time, unless already set. If the span is the root
 // of a span tree, Finish sends the span tree to Sentry as a transaction.
+//
+// The logic is executed at most once per span, so that (incorrectly) calling it twice
+// never double sends to Sentry.
 func (s *Span) Finish() {
-	// TODO(tracing): maybe make Finish run at most once, such that
-	// (incorrectly) calling it twice never double sends to Sentry.
-
-	if s.EndTime.IsZero() {
-		s.EndTime = monotonicTimeSince(s.StartTime)
-	}
-	if !s.Sampled.Bool() {
-		return
-	}
-	event := s.toEvent()
-	if event == nil {
-		return
-	}
-
-	// TODO(tracing): add breadcrumbs
-	// (see https://github.com/getsentry/sentry-python/blob/f6f3525f8812f609/sentry_sdk/tracing.py#L372)
-
-	hub := hubFromContext(s.ctx)
-	if hub.Scope().Transaction() == "" {
-		Logger.Printf("Missing transaction name for span with op = %q", s.Op)
-	}
-	hub.CaptureEvent(event)
+	s.finishOnce.Do(s.doFinish)
 }
 
 // Context returns the context containing the span.
@@ -220,6 +234,9 @@ func (s *Span) StartChild(operation string, options ...SpanOption) *Span {
 // accessing the tags map directly as SetTag takes care of initializing the map
 // when necessary.
 func (s *Span) SetTag(name, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.Tags == nil {
 		s.Tags = make(map[string]string)
 	}
@@ -229,16 +246,36 @@ func (s *Span) SetTag(name, value string) {
 // SetData sets a data on the span. It is recommended to use SetData instead of
 // accessing the data map directly as SetData takes care of initializing the map
 // when necessary.
-func (s *Span) SetData(name, value string) {
+func (s *Span) SetData(name string, value interface{}) {
+	if value == nil {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.Data == nil {
 		s.Data = make(map[string]interface{})
 	}
 	s.Data[name] = value
 }
 
+// SetContext sets a context on the span. It is recommended to use SetContext instead of
+// accessing the contexts map directly as SetContext takes care of initializing the map
+// when necessary.
+func (s *Span) SetContext(key string, value Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.contexts == nil {
+		s.contexts = make(map[string]Context)
+	}
+	s.contexts[key] = value
+}
+
 // IsTransaction checks if the given span is a transaction.
 func (s *Span) IsTransaction() bool {
-	return s.isTransaction
+	return s.parent == nil
 }
 
 // GetTransaction returns the transaction that contains this span.
@@ -270,7 +307,7 @@ func (s *Span) GetTransaction() *Span {
 // func (s *Span) TransactionName() string
 // func (s *Span) SetTransactionName(name string)
 
-// ToSentryTrace returns the seralized TraceParentContext from a transaction/sapn.
+// ToSentryTrace returns the seralized TraceParentContext from a transaction/span.
 // Use this function to propagate the TraceParentContext to a downstream SDK,
 // either as the value of the "sentry-trace" HTTP header, or as an html "sentry-trace" meta tag.
 func (s *Span) ToSentryTrace() string {
@@ -291,25 +328,59 @@ func (s *Span) ToSentryTrace() string {
 // Use this function to propagate the DynamicSamplingContext to a downstream SDK,
 // either as the value of the "baggage" HTTP header, or as an html "baggage" meta tag.
 func (s *Span) ToBaggage() string {
-	if containingTransaction := s.GetTransaction(); containingTransaction != nil {
-		// In case there is currently no frozen DynamicSamplingContext attached to the transaction,
-		// create one from the properties of the transaction.
-		if !s.dynamicSamplingContext.IsFrozen() {
-			// This will return a frozen DynamicSamplingContext.
-			s.dynamicSamplingContext = DynamicSamplingContextFromTransaction(containingTransaction)
-		}
-
-		return containingTransaction.dynamicSamplingContext.String()
+	t := s.GetTransaction()
+	if t == nil {
+		return ""
 	}
-	return ""
+
+	// In case there is currently no frozen DynamicSamplingContext attached to the transaction,
+	// create one from the properties of the transaction.
+	if !s.dynamicSamplingContext.IsFrozen() {
+		// This will return a frozen DynamicSamplingContext.
+		if dsc := DynamicSamplingContextFromTransaction(t); dsc.HasEntries() {
+			t.dynamicSamplingContext = dsc
+		}
+	}
+
+	return t.dynamicSamplingContext.String()
 }
 
 // SetDynamicSamplingContext sets the given dynamic sampling context on the
 // current transaction.
 func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
-	if s.isTransaction {
+	if s.IsTransaction() {
 		s.dynamicSamplingContext = dsc
 	}
+}
+
+// doFinish runs the actual Span.Finish() logic.
+func (s *Span) doFinish() {
+	if s.EndTime.IsZero() {
+		s.EndTime = monotonicTimeSince(s.StartTime)
+	}
+
+	hub := hubFromContext(s.ctx)
+	if !s.IsTransaction() {
+		// Referenced to StartSpan function that pushes current non-transaction span to scope stack
+		defer hub.PopScope()
+	}
+
+	if !s.Sampled.Bool() {
+		return
+	}
+	event := s.toEvent()
+	if event == nil {
+		return
+	}
+
+	if s.collectProfile != nil {
+		event.sdkMetaData.transactionProfile = s.collectProfile(s)
+	}
+
+	// TODO(tracing): add breadcrumbs
+	// (see https://github.com/getsentry/sentry-python/blob/f6f3525f8812f609/sentry_sdk/tracing.py#L372)
+
+	hub.CaptureEvent(event)
 }
 
 // sentryTracePattern matches either
@@ -347,7 +418,7 @@ func (s *Span) updateFromSentryTrace(header []byte) (updated bool) {
 }
 
 func (s *Span) updateFromBaggage(header []byte) {
-	if s.isTransaction {
+	if s.IsTransaction() {
 		dsc, err := DynamicSamplingContextFromHeader(header)
 		if err != nil {
 			return
@@ -374,14 +445,16 @@ func (s *Span) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func (s *Span) sample() Sampled {
-	hub := hubFromContext(s.ctx)
-	var clientOptions ClientOptions
-	client := hub.Client()
+func (s *Span) clientOptions() *ClientOptions {
+	client := hubFromContext(s.ctx).Client()
 	if client != nil {
-		clientOptions = hub.Client().Options()
+		return &client.options
 	}
+	return &ClientOptions{}
+}
 
+func (s *Span) sample() Sampled {
+	clientOptions := s.clientOptions()
 	// https://develop.sentry.dev/sdk/performance/#sampling
 	// #1 tracing is not enabled.
 	if !clientOptions.EnableTracing {
@@ -406,13 +479,17 @@ func (s *Span) sample() Sampled {
 	// Note: non-transaction should always have a parent, but we check both
 	// conditions anyway -- the first for semantic meaning, the second to
 	// avoid a nil pointer dereference.
-	if !s.isTransaction && s.parent != nil {
+	if !s.IsTransaction() && s.parent != nil {
 		return s.parent.Sampled
 	}
 
 	// #3 use TracesSampler from ClientOptions.
 	sampler := clientOptions.TracesSampler
-	samplingContext := SamplingContext{Span: s, Parent: s.parent}
+	samplingContext := SamplingContext{
+		Span:   s,
+		Parent: s.parent,
+	}
+
 	if sampler != nil {
 		tracesSamplerSampleRate := sampler.Sample(samplingContext)
 		s.sampleRate = tracesSamplerSampleRate
@@ -463,10 +540,12 @@ func (s *Span) sample() Sampled {
 }
 
 func (s *Span) toEvent() *Event {
-	if !s.isTransaction {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.IsTransaction() {
 		return nil // only transactions can be transformed into events
 	}
-	hub := hubFromContext(s.ctx)
 
 	children := s.recorder.children()
 	finished := make([]*Span, 0, len(children))
@@ -484,19 +563,29 @@ func (s *Span) toEvent() *Event {
 		s.dynamicSamplingContext = DynamicSamplingContextFromTransaction(s)
 	}
 
+	contexts := make(map[string]Context, len(s.contexts)+1)
+	for k, v := range s.contexts {
+		contexts[k] = cloneContext(v)
+	}
+	contexts["trace"] = s.traceContext().Map()
+
+	// Make sure that the transaction source is valid
+	transactionSource := s.Source
+	if !transactionSource.isValid() {
+		transactionSource = SourceCustom
+	}
+
 	return &Event{
 		Type:        transactionType,
-		Transaction: hub.Scope().Transaction(),
-		Contexts: map[string]Context{
-			"trace": s.traceContext().Map(),
-		},
-		Tags:      s.Tags,
-		Extra:     s.Data,
-		Timestamp: s.EndTime,
-		StartTime: s.StartTime,
-		Spans:     finished,
+		Transaction: s.Name,
+		Contexts:    contexts,
+		Tags:        s.Tags,
+		Extra:       s.Data,
+		Timestamp:   s.EndTime,
+		StartTime:   s.StartTime,
+		Spans:       finished,
 		TransactionInfo: &TransactionInfo{
-			Source: s.Source,
+			Source: transactionSource,
 		},
 		sdkMetaData: SDKMetaData{
 			dsc: s.dynamicSamplingContext,
@@ -586,6 +675,24 @@ const (
 	SourceComponent TransactionSource = "component"
 	SourceTask      TransactionSource = "task"
 )
+
+// A set of all valid transaction sources.
+var allTransactionSources = map[TransactionSource]struct{}{
+	SourceCustom:    {},
+	SourceURL:       {},
+	SourceRoute:     {},
+	SourceView:      {},
+	SourceComponent: {},
+	SourceTask:      {},
+}
+
+// isValid returns 'true' if the given transaction source is a valid
+// source as recognized by the envelope protocol:
+// https://develop.sentry.dev/sdk/event-payloads/transaction/#transaction-annotations
+func (ts TransactionSource) isValid() bool {
+	_, found := allTransactionSources[ts]
+	return found
+}
 
 // SpanStatus is the status of a span.
 type SpanStatus uint8
@@ -749,37 +856,66 @@ func (s Sampled) Bool() bool {
 // A SpanOption is a function that can modify the properties of a span.
 type SpanOption func(s *Span)
 
-// The TransactionName option sets the name of the current transaction.
+// WithTransactionName option sets the name of the current transaction.
 //
 // A span tree has a single transaction name, therefore using this option when
 // starting a span affects the span tree as a whole, potentially overwriting a
 // name set previously.
-func TransactionName(name string) SpanOption {
+func WithTransactionName(name string) SpanOption {
 	return func(s *Span) {
-		hubFromContext(s.Context()).Scope().SetTransaction(name)
+		s.Name = name
 	}
 }
 
-// OpName sets the operation name for a given span.
-func OpName(name string) SpanOption {
+// WithDescription sets the description of a span.
+func WithDescription(description string) SpanOption {
+	return func(s *Span) {
+		s.Description = description
+	}
+}
+
+// WithOpName sets the operation name for a given span.
+func WithOpName(name string) SpanOption {
 	return func(s *Span) {
 		s.Op = name
 	}
 }
 
-// TransctionSource sets the source of the transaction name.
-// TODO(anton): Fix the typo.
-func TransctionSource(source TransactionSource) SpanOption {
+// WithTransactionSource sets the source of the transaction name.
+//
+// Note: if the transaction source is not a valid source (as described
+// by the spec https://develop.sentry.dev/sdk/event-payloads/transaction/#transaction-annotations),
+// it will be corrected to "custom" eventually, before the transaction is sent.
+func WithTransactionSource(source TransactionSource) SpanOption {
 	return func(s *Span) {
 		s.Source = source
 	}
 }
 
-// SpanSampled updates the sampling flag for a given span.
-func SpanSampled(sampled Sampled) SpanOption {
+// WithSpanSampled updates the sampling flag for a given span.
+func WithSpanSampled(sampled Sampled) SpanOption {
 	return func(s *Span) {
 		s.Sampled = sampled
 	}
+}
+
+// WithSpanOrigin sets the origin of the span.
+func WithSpanOrigin(origin SpanOrigin) SpanOption {
+	return func(s *Span) {
+		s.Origin = origin
+	}
+}
+
+// Continue a trace based on traceparent and bagge values.
+// If the SDK is configured with tracing enabled,
+// this function returns populated SpanOption.
+// In any other cases, it populates the propagation context on the scope.
+func ContinueTrace(hub *Hub, traceparent, baggage string) SpanOption {
+	scope := hub.Scope()
+	propagationContext, _ := PropagationContextFromHeaders(traceparent, baggage)
+	scope.SetPropagationContext(propagationContext)
+
+	return ContinueFromHeaders(traceparent, baggage)
 }
 
 // ContinueFromRequest returns a span option that updates the span to continue
@@ -837,27 +973,9 @@ func TransactionFromContext(ctx context.Context) *Span {
 	return nil
 }
 
-// spanFromContext returns the last span stored in the context or a dummy
-// non-nil span.
-//
-// TODO(tracing): consider exporting this. Without this, users cannot retrieve a
-// span from a context since spanContextKey is not exported.
-//
-// This can be added retroactively, and in the meantime think better whether it
-// should return nil (like GetHubFromContext), always non-nil (like
-// HubFromContext), or both: two exported functions.
-//
-// Note the equivalence:
-//
-//	SpanFromContext(ctx).StartChild(...) === StartSpan(ctx, ...)
-//
-// So we don't aim spanFromContext at creating spans, but mutating existing
-// spans that you'd have no access otherwise (because it was created in code you
-// do not control, for example SDK auto-instrumentation).
-//
-// For now we provide TransactionFromContext, which solves the more common case
-// of setting tags, etc, on the current transaction.
-func spanFromContext(ctx context.Context) *Span {
+// SpanFromContext returns the last span stored in the context, or nil if no span
+// is set on the context.
+func SpanFromContext(ctx context.Context) *Span {
 	if span, ok := ctx.Value(spanContextKey{}).(*Span); ok {
 		return span
 	}
@@ -869,13 +987,52 @@ func spanFromContext(ctx context.Context) *Span {
 func StartTransaction(ctx context.Context, name string, options ...SpanOption) *Span {
 	currentTransaction, exists := ctx.Value(spanContextKey{}).(*Span)
 	if exists {
+		currentTransaction.ctx = ctx
 		return currentTransaction
 	}
 
-	options = append(options, TransactionName(name))
+	options = append(options, WithTransactionName(name))
 	return StartSpan(
 		ctx,
 		"",
 		options...,
 	)
+}
+
+// HTTPtoSpanStatus converts an HTTP status code to a SpanStatus.
+func HTTPtoSpanStatus(code int) SpanStatus {
+	if code < http.StatusBadRequest {
+		return SpanStatusOK
+	}
+	if http.StatusBadRequest <= code && code < http.StatusInternalServerError {
+		switch code {
+		case http.StatusForbidden:
+			return SpanStatusPermissionDenied
+		case http.StatusNotFound:
+			return SpanStatusNotFound
+		case http.StatusTooManyRequests:
+			return SpanStatusResourceExhausted
+		case http.StatusRequestEntityTooLarge:
+			return SpanStatusFailedPrecondition
+		case http.StatusUnauthorized:
+			return SpanStatusUnauthenticated
+		case http.StatusConflict:
+			return SpanStatusAlreadyExists
+		default:
+			return SpanStatusInvalidArgument
+		}
+	}
+	if http.StatusInternalServerError <= code && code < 600 {
+		switch code {
+		case http.StatusGatewayTimeout:
+			return SpanStatusDeadlineExceeded
+		case http.StatusNotImplemented:
+			return SpanStatusUnimplemented
+		case http.StatusServiceUnavailable:
+			return SpanStatusUnavailable
+		default:
+			return SpanStatusInternalError
+		}
+	}
+	return SpanStatusUnknown
 }
